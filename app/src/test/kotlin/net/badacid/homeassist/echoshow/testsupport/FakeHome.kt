@@ -65,6 +65,22 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
 
     val openSocketCount: Int @Synchronized get() = sockets.size
 
+    /** How many registry lists (entity, device or area) have been read in all. */
+    @Volatile var registryListCount = 0
+        private set
+
+    /** The event types sockets have subscribed to, in order. */
+    val subscribedEventTypes = mutableListOf<String>()
+    private val eventSubscribers = mutableListOf<Triple<(JsonObject) -> Unit, Int, String>>()
+
+    /** Tells every socket subscribed to `eventType` that it happened, as Home Assistant does when a registry changes. */
+    @Synchronized
+    fun fireRegistryEvent(eventType: String) {
+        for ((send, id, type) in eventSubscribers.toList()) {
+            if (type == eventType) send(jsonObjectOf("id" to id, "type" to "event", "event" to mapOf("event_type" to type, "data" to mapOf("action" to "update"))))
+        }
+    }
+
     private fun newId(prefix: String) = "$prefix-${++counter}"
 
     private fun findState(entityId: String?) = states.firstOrNull { textOrNull(it["entity_id"]) == entityId }
@@ -195,6 +211,7 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
                     isOpen = false
                     sockets.remove(this)
                     subscribers.removeAll { it.first === sendToClient }
+                    eventSubscribers.removeAll { it.first === sendToClient }
                 }
                 onClose()
             }
@@ -224,16 +241,22 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
 
                 when (type) {
                     "ping" -> sendToClient(jsonObjectOf("id" to id, "type" to "pong"))
-                    "supported_features", "subscribe_events", "unsubscribe_events" -> result(id, null)
+                    "supported_features", "unsubscribe_events" -> result(id, null)
+                    "subscribe_events" -> {
+                        val eventType = textOrNull(message["event_type"]) ?: "*"
+                        subscribedEventTypes += eventType
+                        eventSubscribers += Triple(sendToClient, id, eventType)
+                        result(id, null)
+                    }
                     "subscribe_entities" -> {
                         subscribers += sendToClient to id
                         result(id, null)
                         sendToClient(jsonObjectOf("id" to id, "type" to "event", "event" to mapOf("a" to allStatesCompressed())))
                     }
                     "get_states" -> result(id, JsonArray(states.map { JsonObject(it) }))
-                    "config/entity_registry/list" -> result(id, entities)
-                    "config/device_registry/list" -> result(id, devices)
-                    "config/area_registry/list" -> result(id, areas)
+                    "config/entity_registry/list" -> result(id, entities).also { registryListCount++ }
+                    "config/device_registry/list" -> result(id, devices).also { registryListCount++ }
+                    "config/area_registry/list" -> result(id, areas).also { registryListCount++ }
                     "auth/current_user" -> result(id, user)
                     "call_service" -> {
                         calls += message
