@@ -31,6 +31,8 @@ data class SettingsScreenState(
     val version: String,
     /** The PIN lock's PIN, or null when the lock is off. */
     val pin: String?,
+    /** Seconds without a touch before the screen blanks; 0 never. */
+    val blankAfterSeconds: Int,
 )
 
 interface SettingsCallbacks {
@@ -46,9 +48,12 @@ interface SettingsCallbacks {
 
     /** A new PIN, or null to turn the lock off. */
     fun onSetPin(pin: String?)
+
+    /** How long the screen waits before blanking, in seconds; 0 never. */
+    fun onSetBlankAfter(seconds: Int)
 }
 
-private enum class Section(val label: String) { DEVICES("Devices"), CONNECTION("Connection"), PIN("PIN lock"), ABOUT("About") }
+private enum class Section(val label: String) { DEVICES("Devices"), CONNECTION("Connection"), PIN("PIN lock"), SCREEN("Screen"), ABOUT("About") }
 
 /** Where the PIN section is: showing what is set, or asking for a PIN. */
 private sealed interface PinStep {
@@ -119,8 +124,8 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
         // Redraw only when what is shown changed: Home Assistant reports often, and a row replaced between a
         // finger going down and coming up would lose the tap. The other sections do not change while open.
         val listChanged = before == null || before.rooms != state.rooms || before.layout != state.layout
-        val pinChanged = before != null && before.pin != state.pin
-        if (before == null || (section == Section.DEVICES && listChanged) || (section == Section.PIN && pinChanged && pinStep == PinStep.Idle)) draw()
+        val pinChanged = before != null && (before.pin != state.pin || before.blankAfterSeconds != state.blankAfterSeconds)
+        if (before == null || (section == Section.DEVICES && listChanged) || (section == Section.PIN && pinChanged && pinStep == PinStep.Idle) || (section == Section.SCREEN && pinChanged)) draw()
     }
 
     private fun open(each: Section) {
@@ -147,6 +152,7 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
             Section.DEVICES -> drawDevices(state)
             Section.CONNECTION -> drawConnection(state)
             Section.PIN -> drawPin(state)
+            Section.SCREEN -> drawScreen(state)
             Section.ABOUT -> drawAbout(state)
         }
     }
@@ -325,6 +331,29 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
             }
             PinStep.Idle -> Unit
         }
+    }
+
+    // ---- Screen (the original Echo app's screen blanking) ----
+
+    private fun blankWords(seconds: Int) = when {
+        seconds <= 0 -> "Never"
+        seconds < 60 -> "$seconds seconds"
+        seconds == 60 -> "1 minute"
+        else -> "${seconds / 60} minutes"
+    }
+
+    private fun drawScreen(state: SettingsScreenState) {
+        note("The screen goes black after this long without a touch, and a touch wakes it. It stays on while live video plays. With the PIN lock on, the PIN is asked for again after the screen has gone black.")
+        content.addView(Theme.text(context, "Blank the screen after", Theme.SMALL_SP, Theme.TEXT_DIM), Widgets.matchWidth().apply { topMargin = dp(20f) })
+        val choices = net.badacid.homeassist.echoshow.screens.FlowLayout(context, dp(10f))
+        for (seconds in net.badacid.homeassist.echoshow.core.BLANK_AFTER_CHOICES) {
+            choices.addView(net.badacid.homeassist.echoshow.screens.panel.panelButton(context, blankWords(seconds), seconds == state.blankAfterSeconds, true, null) {
+                callbacks.onSetBlankAfter(seconds)
+                this.state = state.copy(blankAfterSeconds = seconds)
+                draw()
+            })
+        }
+        content.addView(choices, Widgets.matchWidth().apply { topMargin = dp(8f) })
     }
 
     // ---- About (AboutSection.tsx) ----

@@ -5,7 +5,11 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
+import net.badacid.homeassist.echoshow.core.DEFAULT_BLANK_AFTER_SECONDS
+import net.badacid.homeassist.echoshow.core.ScreenSaver
 import android.view.WindowManager
 import net.badacid.homeassist.echoshow.devices.PanelLayout
 import net.badacid.homeassist.echoshow.devices.deviceLogicFor
@@ -69,6 +73,12 @@ class MainActivity : Activity() {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         root = FrameLayout(this).apply { setBackgroundColor(Theme.BACKGROUND) }
         setContentView(root)
+        blackout = View(this).apply {
+            tag = "blank-screen"
+            setBackgroundColor(android.graphics.Color.BLACK)
+            visibility = View.GONE
+        }
+        root.addView(blackout, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         model.start()
         scope.launch { model.state.collect { render(it) } }
     }
@@ -82,6 +92,70 @@ class MainActivity : Activity() {
         renderPhase(state)
         renderOverlay(state)
         renderLock(state)
+        val blankMs = state.saved.blankAfterSeconds * 1000L
+        if (blankMs != shownBlankMs) {
+            shownBlankMs = blankMs
+            saver.setBlankAfter(blankMs)
+            updateBlank()
+        }
+        // The black layer stays on top of everything.
+        blackout.bringToFront()
+    }
+
+    // ---- Screen blanking, as the original Echo app: the screen stays on while the app is in front, and goes
+    // black with the backlight off after a set time without a touch. A touch on it only wakes it. ----
+
+    private val saver = ScreenSaver(DEFAULT_BLANK_AFTER_SECONDS * 1000L) { SystemClock.uptimeMillis() }
+    private var shownBlankMs = -1L
+    private lateinit var blackout: View
+    private val blankTimer = android.os.Handler(android.os.Looper.getMainLooper())
+    private val checkBlank = Runnable { updateBlank() }
+    private var swallowingTouch = false
+
+    private fun updateBlank() {
+        blankTimer.removeCallbacks(checkBlank)
+        applyBlank(saver.isBlank())
+        saver.msUntilBlank()?.let { blankTimer.postDelayed(checkBlank, it + 50) }
+    }
+
+    private fun applyBlank(blank: Boolean) {
+        if (!::blackout.isInitialized) return
+        val wasBlank = blackout.visibility == View.VISIBLE
+        blackout.visibility = if (blank) View.VISIBLE else View.GONE
+        val attributes = window.attributes
+        val brightness = if (blank) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        if (attributes.screenBrightness != brightness) {
+            attributes.screenBrightness = brightness
+            window.attributes = attributes
+        }
+        // Going black counts as the screen sleeping: the PIN lock locks.
+        if (blank && !wasBlank) model.lock()
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            swallowingTouch = saver.onTouch()
+            updateBlank()
+        }
+        if (swallowingTouch) {
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) swallowingTouch = false
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        saver.onTouch() // Coming back counts as a touch: the screen starts awake.
+        updateBlank()
+    }
+
+    override fun onPause() {
+        blankTimer.removeCallbacks(checkBlank)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        applyBlank(false) // Never leave another app's screen black.
+        super.onPause()
     }
 
     private var lockView: LockView? = null
@@ -208,8 +282,9 @@ class MainActivity : Activity() {
         System::currentTimeMillis,
         onClose = { model.closeOverlay() },
         onLiveRunning = { running ->
-            // The screen stays on only while live video plays (or is starting).
-            if (running) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            // Live video keeps the screen from blanking.
+            saver.onActive(running)
+            updateBlank()
         },
     )
 
@@ -245,6 +320,7 @@ class MainActivity : Activity() {
         isToken = state.saved.signIn?.kind == SignInKind.LONG_LIVED_TOKEN,
         version = BuildConfig.VERSION_NAME,
         pin = state.saved.pin,
+        blankAfterSeconds = state.saved.blankAfterSeconds,
     )
 
     private val homeCallbacks = object : HomeCallbacks {
@@ -258,6 +334,7 @@ class MainActivity : Activity() {
         override fun onClose() = model.closeOverlay()
         override fun onReorganise() = model.openReorganise()
         override fun onSetPin(pin: String?) = model.setPin(pin)
+        override fun onSetBlankAfter(seconds: Int) = model.setBlankAfter(seconds)
         override fun onToggleDevice(device: Device) = model.toggleDevice(device)
         override fun onSignOut() = model.signOut()
         override fun onOpenLink(address: String) {

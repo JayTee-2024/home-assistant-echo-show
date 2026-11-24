@@ -145,7 +145,6 @@ class MainActivityTest {
         idle()
         val camera = activity.find<net.badacid.homeassist.echoshow.screens.camera.CameraView>()!!
         val keepOn = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        assertEquals(0, activity.get().window.attributes.flags and keepOn)
         val found = ArrayList<View>()
         camera.findViewsWithText(found, "Watch live", View.FIND_VIEWS_WITH_TEXT)
         found.first().performClick()
@@ -154,7 +153,6 @@ class MainActivityTest {
         activity.pause().stop()
         idle()
         assertEquals(true, stopped)
-        assertEquals(0, activity.get().window.attributes.flags and keepOn)
     }
 
     @Test
@@ -170,5 +168,26 @@ class MainActivityTest {
         activity.start().resume()
         idle()
         assertNotNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+    }
+
+    @Test
+    fun `after the time the screen blanks and locks, and a tap only wakes it`() {
+        useFakes(pin = "1234")
+        val activity = launch()
+        app.model.unlock()
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(31))
+        val blank = activity.get().window.decorView.findViewWithTag<View>("blank-screen")
+        assertEquals(View.VISIBLE, blank.visibility)
+        assertEquals(true, app.model.state.value.isLocked)
+        assertEquals(android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF, activity.get().window.attributes.screenBrightness)
+        // A tap wakes the screen; it does not reach the lock screen's keys underneath.
+        val time = android.os.SystemClock.uptimeMillis()
+        activity.get().dispatchTouchEvent(android.view.MotionEvent.obtain(time, time, android.view.MotionEvent.ACTION_DOWN, 640f, 400f, 0))
+        activity.get().dispatchTouchEvent(android.view.MotionEvent.obtain(time, time + 50, android.view.MotionEvent.ACTION_UP, 640f, 400f, 0))
+        idle()
+        assertEquals(View.GONE, blank.visibility)
+        assertEquals(android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, activity.get().window.attributes.screenBrightness)
+        assertEquals(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, activity.get().window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 }

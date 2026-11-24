@@ -38,6 +38,7 @@ class SettingsViewTest {
         override fun onSignOut() { calls += "sign out" }
         override fun onOpenLink(address: String) { calls += "open $address" }
         override fun onSetPin(pin: String?) { calls += "pin $pin" }
+        override fun onSetBlankAfter(seconds: Int) { calls += "blank $seconds" }
     }
 
     private fun state(isToken: Boolean = false) = SettingsScreenState(
@@ -48,6 +49,7 @@ class SettingsViewTest {
         isToken = isToken,
         version = "0.3.0",
         pin = null,
+        blankAfterSeconds = 30,
     )
 
     private fun settings(state: SettingsScreenState = state()) = SettingsView(context, callbacks).apply {
@@ -112,6 +114,16 @@ class SettingsViewTest {
     }
 
     @Test
+    fun `Screen offers the blanking times, with the current one marked`() {
+        val view = settings()
+        view.withText("Screen").performClick()
+        laidOut(view)
+        assertTrue(visibleTexts(view).containsAll(listOf("Never", "30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes")))
+        view.withText("1 minute").performClick()
+        assertEquals(listOf("blank 60"), calls)
+    }
+
+    @Test
     fun `a tap on a device calls toggleDevice`() {
         val view = settings()
         view.rowWith("Kitchen ceiling").performClick()
@@ -165,5 +177,7 @@ class SettingsViewTest {
         snapshot(view, "settings-about")
         view.withText("PIN lock").performClick()
         snapshot(view, "settings-pin")
+        view.withText("Screen").performClick()
+        snapshot(view, "settings-screen")
     }
 }

@@ -142,6 +142,9 @@ class AppModel(
 
     // ---- The PIN lock ----
 
+    /** Settings' Screen section: seconds before the screen blanks, 0 never. */
+    fun setBlankAfter(seconds: Int) = updateSaved { it.copy(blankAfterSeconds = seconds.coerceAtLeast(0)) }
+
     /** Settings' PIN section: a new PIN, or null to turn the lock off. */
     fun setPin(pin: String?) = updateSaved { it.copy(pin = pin) }
 
