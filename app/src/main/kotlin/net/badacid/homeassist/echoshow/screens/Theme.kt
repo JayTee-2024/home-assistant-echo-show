@@ -16,6 +16,7 @@ object Theme {
     val TEXT_DIM = Color.parseColor("#9AA3AE")
     val AMBER = Color.parseColor("#FFB454")
     val AMBER_DIM = Color.parseColor("#3A2E1B")
+    val AMBER_PRESSED = Color.parseColor("#D9963F")
     val ERROR = Color.parseColor("#FF7A7A")
     val BACKDROP = Color.parseColor("#B3000000")
 

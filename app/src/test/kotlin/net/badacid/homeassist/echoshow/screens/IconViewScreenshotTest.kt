@@ -13,7 +13,7 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-mdpi")
+@Config(sdk = [35], qualifiers = "w960dp-h600dp-land-tvdpi")
 class IconViewScreenshotTest {
     @Test
     fun drawsEveryDeviceIcon() {
