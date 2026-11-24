@@ -13,6 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -47,4 +48,8 @@ dependencies {
     testImplementation(libs.coroutines.test)
     testImplementation(libs.mockwebserver)
     testRuntimeOnly(libs.junit.launcher)
+
+    // On-device tests only (the keystore); the app itself uses no AndroidX library.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 }
