@@ -39,8 +39,12 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.okhttp)
+    implementation(libs.coroutines.android)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockwebserver)
     testRuntimeOnly(libs.junit.launcher)
 }
