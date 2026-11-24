@@ -397,4 +397,62 @@ class DevicesTest {
             assertEquals(emptyList<Part>(), findDevice(devices, "device:dev_garage")?.parts)
         }
     }
+
+    /** Switches and buttons that might open a garage or gate, by their names (Simon's rule, plan 4 task 1). */
+    @Nested
+    inner class OpenersByName {
+        private val types = partTypes + withSwitch + partType("script", 90, CardSize.SMALL, listOf("script", "scene", "input_boolean", "input_button"))
+        private fun devicesOf(home: HomeSnapshot) = buildDevices(home, types)
+
+        private fun HomeSnapshot.withNamedEntity(deviceId: String?, entityId: String, name: String?) = copy(
+            states = states + (entityId to state(entityId, "off")),
+            entities = entities + entry(entityId, deviceId, name = name),
+        )
+
+        @Test
+        fun `a switch named Garage door hides its whole device`() {
+            val home = sampleHome().withNamedEntity("dev_plug_tv", "switch.relay_2", "Garage door")
+            assertEquals(emptyList<Part>(), findDevice(devicesOf(home), "device:dev_plug_tv")?.parts)
+        }
+
+        @Test
+        fun `a button called Open gate with no device is not listed`() {
+            val home = sampleHome().withNamedEntity(null, "button.relay_3", "Open gate")
+            assertNull(findDevice(devicesOf(home), "entity:button.relay_3"))
+        }
+
+        @Test
+        fun `script unlock_front_door is not listed`() {
+            val home = sampleHome().copy(states = sampleHome().states + ("script.unlock_front_door" to state("script.unlock_front_door", "off")))
+            assertNull(findDevice(devicesOf(home), "entity:script.unlock_front_door"))
+        }
+
+        @Test
+        fun `a device named Garage opener hides even its Toggle switch`() {
+            val home = sampleHome()
+                .withNamedEntity("dev_plug_tv", "switch.relay_4", "Toggle")
+                .changeDevice("dev_plug_tv") { it.copy(nameByUser = "Garage opener") }
+            assertEquals(emptyList<Part>(), findDevice(devicesOf(home), "device:dev_plug_tv")?.parts)
+        }
+
+        @Test
+        fun `the Front door doorbell, a door sensor and a front door switch are still shown`() {
+            val home = sampleHome().withNamedEntity("dev_ring", "switch.front_door_siren", "Front door siren")
+            assertTrue(findDevice(devicesOf(home), "device:dev_ring")!!.parts.isNotEmpty())
+            assertTrue(findDevice(devicesOf(home), "device:dev_ring")!!.parts.any { it.entityId == "switch.front_door_siren" })
+        }
+
+        @Test
+        fun `the word gateway does not count`() {
+            val home = sampleHome().withNamedEntity("dev_plug_tv", "switch.gateway_power", "Gateway power")
+            assertTrue(findDevice(devicesOf(home), "device:dev_plug_tv")!!.parts.any { it.entityId == "switch.gateway_power" })
+        }
+
+        @Test
+        fun `door and open together count, in any order`() {
+            assertTrue(isOpenerByName("switch.x", listOf("Door open")))
+            assertTrue(isOpenerByName("button.open_shed_door", listOf(null)))
+            assertFalse(isOpenerByName("switch.door_light", listOf("Door light")))
+        }
+    }
 }
