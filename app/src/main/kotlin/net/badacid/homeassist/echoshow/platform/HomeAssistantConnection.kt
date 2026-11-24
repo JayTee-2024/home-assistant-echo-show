@@ -64,6 +64,16 @@ import okhttp3.WebSocketListener
 /** HTTP requests (token refresh and revoke) give up after this long, as the LG app's did. */
 const val REQUEST_TIMEOUT_MS = 8_000L
 
+/** A command Home Assistant has not answered in this long is reported as refused. */
+const val COMMAND_TIMEOUT_MS = 10_000L
+
+/**
+ * The socket pings Home Assistant this often. A link that has silently died (the Echo's Wi-Fi asleep, the
+ * router restarted) then fails within one interval and the connection reconnects, rather than looking
+ * connected for ever. Home Assistant's server answers pings by itself.
+ */
+private const val PING_INTERVAL_MS = 20_000L
+
 /** How long the socket may take to answer and accept the sign-in. */
 private const val SIGN_IN_TIMEOUT_MS = 10_000L
 
@@ -84,8 +94,10 @@ suspend fun openHomeConnection(
     firstLoadTimeoutMs: Long = 20_000,
     registryRefreshDelayMs: Long = 1_000,
     reconnectDelay: (Int) -> Long = ::reconnectDelayMs,
+    commandTimeoutMs: Long = COMMAND_TIMEOUT_MS,
 ): HomeConnection {
-    val connection = HomeAssistantConnection(signIn, onTokens, client, scope, clock, firstLoadTimeoutMs, registryRefreshDelayMs, reconnectDelay)
+    val pinging = client.newBuilder().pingInterval(PING_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS).build()
+    val connection = HomeAssistantConnection(signIn, onTokens, pinging, scope, clock, firstLoadTimeoutMs, registryRefreshDelayMs, reconnectDelay, commandTimeoutMs)
     connection.open()
     return connection
 }
@@ -99,7 +111,11 @@ private class HomeAssistantConnection(
     private val firstLoadTimeoutMs: Long,
     private val registryRefreshDelayMs: Long,
     private val reconnectDelay: (Int) -> Long,
+    private val commandTimeoutMs: Long,
 ) : HomeConnection {
+    /** For tests. */
+    val pingIntervalMs: Int get() = client.pingIntervalMillis
+
     private val lock = Any()
     private val send: HttpSend = withSendTimeout(OkHttpSend(client), REQUEST_TIMEOUT_MS)
     private val homeFlow = MutableStateFlow(EMPTY_HOME)
@@ -131,15 +147,19 @@ private class HomeAssistantConnection(
     override suspend fun call(call: ServiceCall) {
         val current = synchronized(lock) { session.takeIf { statusFlow.value == ConnectionStatus.CONNECTED } } ?: throw CommandRefused()
         try {
-            current.request(
-                jsonObjectOf(
-                    "type" to "call_service",
-                    "domain" to call.domain,
-                    "service" to call.service,
-                    "service_data" to call.data,
-                    "target" to mapOf("entity_id" to call.entityId),
-                ),
-            )
+            val answered = kotlinx.coroutines.withTimeoutOrNull(commandTimeoutMs) {
+                current.request(
+                    jsonObjectOf(
+                        "type" to "call_service",
+                        "domain" to call.domain,
+                        "service" to call.service,
+                        "service_data" to call.data,
+                        "target" to mapOf("entity_id" to call.entityId),
+                    ),
+                )
+                true
+            }
+            if (answered == null) throw CommandRefused()
         } catch (refused: SessionError) {
             throw CommandRefused(refused.message?.takeIf { it.isNotEmpty() } ?: COMMAND_REFUSED)
         }
@@ -198,7 +218,11 @@ private class HomeAssistantConnection(
         when (val result = refreshTokens(send, current, clock())) {
             is RefreshResult.Refreshed -> {
                 synchronized(lock) { signIn = result.signIn }
-                onTokens(result.signIn)
+                // Saving is the caller's business; a failure there must not stop the connection.
+                try {
+                    onTokens(result.signIn)
+                } catch (_: Exception) {
+                }
             }
             RefreshResult.Rejected -> throw OpenFailed(OpenFailure.SIGN_IN_REJECTED)
             RefreshResult.CannotReach -> throw OpenFailed(OpenFailure.CANNOT_REACH)
@@ -326,8 +350,7 @@ private class HomeAssistantConnection(
      * One WebSocket and its message bookkeeping. Each request gets the next id; its result completes the
      * matching deferred. A subscription keeps its id and gets every event sent with it.
      */
-    private inner class Session(url: String) : WebSocketListener() {
-        private val socket: WebSocket = client.newWebSocket(Request.Builder().url(url).build(), this)
+    private inner class Session(private val url: String) : WebSocketListener() {
         private val authRequired = CompletableDeferred<Unit>()
         private val authResult = CompletableDeferred<Boolean>()
         private val pending = mutableMapOf<Int, CompletableDeferred<JsonElement?>>()
@@ -339,6 +362,12 @@ private class HomeAssistantConnection(
 
         /** This session's copy of the states, kept current by its entities subscription. Guarded by `lock`. */
         var states: Map<String, EntityState> = emptyMap()
+
+        /**
+         * Declared last: OkHttp starts calling this listener on its own threads as soon as the socket is
+         * made, so every field above must already be set.
+         */
+        private val socket: WebSocket = client.newWebSocket(Request.Builder().url(url).build(), this)
 
         /** Runs `action` when the socket ends (at once if it already has). */
         fun whenEnded(action: () -> Unit) {
@@ -381,7 +410,7 @@ private class HomeAssistantConnection(
         }
 
         private fun send(message: JsonObject, result: CompletableDeferred<JsonElement?>, onEvent: ((JsonObject) -> Unit)?) {
-            val id = synchronized(lock) {
+            synchronized(lock) {
                 if (!isOpen) {
                     result.completeExceptionally(SessionError(""))
                     return
@@ -389,9 +418,10 @@ private class HomeAssistantConnection(
                 val id = nextId++
                 pending[id] = result
                 if (onEvent != null) subscriptions[id] = onEvent
-                id
+                // Sent under the lock, so ids reach Home Assistant in the order they were given out: it refuses
+                // an id that is not higher than the last. OkHttp's send only queues, so this does not block.
+                socket.send(JsonObject(message + ("id" to JsonPrimitive(id))).toString())
             }
-            socket.send(JsonObject(message + ("id" to JsonPrimitive(id))).toString())
         }
 
         fun close() {
@@ -463,3 +493,6 @@ private class HomeAssistantConnection(
         return http.toString().replaceFirst("http", "ws")
     }
 }
+
+/** For tests: how often this connection's socket sends keep-alive pings, in milliseconds (0 = never). */
+internal fun pingIntervalOf(connection: HomeConnection): Int = (connection as HomeAssistantConnection).pingIntervalMs

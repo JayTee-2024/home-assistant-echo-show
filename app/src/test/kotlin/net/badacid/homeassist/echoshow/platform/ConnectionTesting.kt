@@ -28,15 +28,18 @@ open class ConnectionTesting {
         firstLoadTimeoutMs: Long = 5_000,
         registryRefreshDelayMs: Long = 200,
         reconnectDelay: (Int) -> Long = { attempt -> attempt * 50L },
+        commandTimeoutMs: Long = 10_000,
+        onTokens: (SavedSignIn) -> Unit = { savedTokens += it },
     ): HomeConnection = openHomeConnection(
         signIn,
-        onTokens = { savedTokens += it },
+        onTokens = onTokens,
         client = client,
         scope = scope,
         clock = clock,
         firstLoadTimeoutMs = firstLoadTimeoutMs,
         registryRefreshDelayMs = registryRefreshDelayMs,
         reconnectDelay = reconnectDelay,
+        commandTimeoutMs = commandTimeoutMs,
     ).also { opened += it }
 
     /** Waits up to five seconds for `flow` to hold a value matching `test`. */

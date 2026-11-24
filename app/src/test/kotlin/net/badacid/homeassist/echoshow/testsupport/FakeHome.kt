@@ -60,6 +60,9 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
     /** Every refresh token the app revoked, in order. */
     val revokedTokens = mutableListOf<String>()
 
+    /** Every id refused for not being higher than the one before. */
+    val idErrors = mutableListOf<Int>()
+
     /** Every call_service message received, in order. */
     val calls = mutableListOf<JsonObject>()
 
@@ -202,6 +205,7 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
         val socket = object : FakeSocket {
             var signedIn = false
             var isOpen = true
+            var lastId = 0
 
             override fun receive(message: JsonObject) = synchronized(this@FakeHome) { handle(message) }
 
@@ -236,6 +240,12 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
                     return
                 }
                 val id = (message["id"] as? JsonPrimitive)?.doubleOrNull?.toInt() ?: return
+                // As Home Assistant does: every message id must be higher than the last one on this socket.
+                if (id <= lastId) {
+                    idErrors += id
+                    return failure(id, "id_reuse", "Identifier values have to increase.")
+                }
+                lastId = id
                 if (type in silentCommands) return
                 if (type in brokenCommands) return failure(id, "home_assistant_error", "Home Assistant is not ready yet.")
 

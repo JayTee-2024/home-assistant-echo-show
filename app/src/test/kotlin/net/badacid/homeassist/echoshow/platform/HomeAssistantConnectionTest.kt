@@ -1,6 +1,7 @@
 package net.badacid.homeassist.echoshow.platform
 
 import kotlinx.coroutines.async
+import net.badacid.homeassist.echoshow.core.HomeConnection
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -182,4 +183,43 @@ class HomeAssistantConnectionTest : ConnectionTesting() {
         Unit
     }
 
+
+    @Test
+    fun `message ids always reach Home Assistant in increasing order, even when sent from many threads`() = runBlocking {
+        repeat(5) {
+            val connection = open()
+            val jobs = (1..40).map { i ->
+                scope.async {
+                    runCatching { connection.call(ServiceCall("switch", if (i % 2 == 0) "turn_on" else "turn_off", "switch.tv_plug", jsonObjectOf())) }
+                }
+            }
+            jobs.forEach { it.await() }
+            connection.close()
+        }
+        assertEquals(emptyList<Int>(), fake.home.idErrors)
+    }
+
+    @Test
+    fun `a command Home Assistant never answers is refused after the time limit`() = runBlocking {
+        val connection = open(commandTimeoutMs = 300)
+        fake.silenceCommand("call_service")
+        val started = System.currentTimeMillis()
+        val refused = assertThrows<CommandRefused> { runBlocking { connection.call(toggleLamp) } }
+        assertEquals(COMMAND_REFUSED, refused.reason)
+        assertTrue(System.currentTimeMillis() - started < 3_000)
+    }
+
+    @Test
+    fun `a failure saving fresh tokens does not stop the connection opening or reconnecting`() = runBlocking {
+        val expired = fake.signInTokens(expiresAt = System.currentTimeMillis() - 1)
+        val connection = open(expired, onTokens = { throw java.io.IOException("disk full") })
+        assertEquals("TV", connection.userName)
+        Unit
+    }
+
+    @Test
+    fun `the connection sends keep-alive pings, so a dead link is noticed`() = runBlocking {
+        val connection = open()
+        assertTrue(pingIntervalOf(connection) in 1..30_000, "ping interval ${pingIntervalOf(connection)}")
+    }
 }
