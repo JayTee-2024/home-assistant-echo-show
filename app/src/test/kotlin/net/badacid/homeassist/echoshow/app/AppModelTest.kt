@@ -39,16 +39,7 @@ import org.junit.jupiter.api.Test
 /** The app's brain, against a stand-in connection, in virtual time. App.tsx in the LG app is the behaviour to match. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppModelTest {
-    private val sampleHome: HomeSnapshot = run {
-        val text = javaClass.getResource("/sample-home.json")!!.readText()
-        val raw = Json.parseToJsonElement(text).jsonObject
-        HomeSnapshot(
-            states = (raw["states"] as kotlinx.serialization.json.JsonArray).mapNotNull { readEntityState(it) }.associateBy { it.entityId },
-            entities = readRegistryEntities(raw["entities"]),
-            devices = readRegistryDevices(raw["devices"]),
-            areas = readRegistryAreas(raw["areas"]),
-        )
-    }
+    private val sampleHome: HomeSnapshot = net.badacid.homeassist.echoshow.testsupport.sampleHome()
     private val account = SavedSignIn("http://ha:8123", SignInKind.ACCOUNT, "access", "refresh", 9_999_999_999_999)
 
     private class MemoryStorage(var text: String? = null) : SavedTextStorage {

@@ -1,0 +1,183 @@
+package net.badacid.homeassist.echoshow.screens.home
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
+import net.badacid.homeassist.echoshow.core.CardSize
+import net.badacid.homeassist.echoshow.screens.IconView
+import net.badacid.homeassist.echoshow.screens.Theme
+import net.badacid.homeassist.echoshow.screens.Widgets
+import kotlin.math.abs
+
+/** How long a press must last to open the panel. */
+const val HOLD_MS = 500L
+
+/**
+ * One card on the home screen: icon and state at the top, name, room and other parts below; amber while the
+ * device is "on". A tap calls `onTap`; holding for HOLD_MS calls `onHold` instead, and the card dims while held.
+ */
+@SuppressLint("ViewConstructor")
+class CardView(
+    context: Context,
+    private val size: CardSize,
+    private val onTap: () -> Unit,
+    private val onHold: () -> Unit,
+    private val makePicture: (() -> CameraPictureView)? = null,
+) : FrameLayout(context) {
+    private val dp = { value: Float -> Theme.dp(context, value) }
+    private val panel = Theme.roundedPanel(context, Theme.SURFACE, 18f)
+    private val icon = FrameLayout(context)
+    private val state = Theme.text(context, "", Theme.CARD_NAME_SP, bold = true).apply { gravity = Gravity.END; maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+    private val big = Theme.text(context, "", 34f, bold = true).apply { gravity = Gravity.END }
+    private val details = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
+    private val name = Theme.text(context, "", Theme.CARD_NAME_SP, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+    private val room = Theme.text(context, "", Theme.CARD_LINE_SP, Theme.TEXT_DIM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+    private val extras = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private var picture: CameraPictureView? = null
+    private var iconPath: String? = null
+    private var iconView: IconView? = null
+
+    init {
+        background = panel
+        val pad = dp(16f)
+        setPadding(pad, pad, pad, pad)
+        val faceColumn = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+            addView(state, Widgets.wrap())
+            addView(big, Widgets.wrap())
+            addView(details, Widgets.wrap())
+        }
+        val top = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(icon, LinearLayout.LayoutParams(dp(36f), dp(36f)))
+            addView(faceColumn, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(8f) })
+        }
+        addView(top, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        val names = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(name, Widgets.matchWidth())
+            addView(room, Widgets.matchWidth())
+            addView(extras, Widgets.matchWidth())
+        }
+        addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+    }
+
+    fun show(content: CardContent) {
+        contentDescription = content.name
+        val active = content.isActive
+        panel.setColor(if (active) Theme.AMBER_DIM else Theme.SURFACE)
+        panel.setStroke(dp(2f), if (active) Theme.AMBER else Theme.SURFACE)
+        alpha = if (content.isUnavailable || content.isMissing) 0.6f else 1f
+
+        if (content.icon != iconPath) {
+            iconPath = content.icon
+            icon.removeAllViews()
+            iconView = content.icon?.let { IconView(context, it, Theme.TEXT).also { view -> icon.addView(view) } }
+        }
+        iconView?.colour = if (active) Theme.AMBER else Theme.TEXT
+
+        val face = content.face
+        state.text = face.state.orEmpty() + (face.unit?.let { " $it" } ?: "")
+        state.visibility = if (face.state == null) GONE else VISIBLE
+        state.setTextColor(if (active) Theme.AMBER else Theme.TEXT)
+        big.text = face.big.orEmpty()
+        big.visibility = if (face.big == null) GONE else VISIBLE
+        details.removeAllViews()
+        face.details.forEachIndexed { index, line ->
+            val row = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.END }
+            if (index == 0 && face.colour != null) {
+                row.addView(View(context).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(face.colour) } }, LinearLayout.LayoutParams(dp(12f), dp(12f)).apply { rightMargin = dp(6f) })
+            }
+            row.addView(Theme.text(context, line, Theme.CARD_LINE_SP, Theme.TEXT_DIM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+            details.addView(row, Widgets.wrap())
+        }
+
+        name.text = content.name
+        room.text = content.room.orEmpty()
+        room.visibility = if (content.room == null) GONE else VISIBLE
+        extras.removeAllViews()
+        for (line in content.extraLines) {
+            extras.addView(Theme.text(context, line, Theme.CARD_LINE_SP, Theme.TEXT_DIM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, Widgets.matchWidth())
+        }
+
+        // A camera card is its picture, with the name and lines over its lower part.
+        if (face.isPicture && content.mainEntity != null && makePicture != null) {
+            val view = picture ?: makePicture.invoke().also {
+                picture = it
+                addView(it, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply { bottomMargin = dp(if (size == CardSize.LARGE) 92f else 60f) })
+            }
+            view.show(content.mainEntity)
+        }
+    }
+
+    // ---- Tap and hold ----
+
+    // A handler, not View.postDelayed: that one waits until the view is attached to a window.
+    private val timer = Handler(Looper.getMainLooper())
+    private val slop = ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var held = false
+    private var pressing = false
+    private val hold = Runnable {
+        held = true
+        pressing = false
+        alpha = alphaBeforePress
+        onHold()
+    }
+    private var alphaBeforePress = 1f
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                held = false
+                pressing = true
+                alphaBeforePress = alpha
+                alpha = alphaBeforePress * 0.7f
+                timer.postDelayed(hold, HOLD_MS)
+            }
+            MotionEvent.ACTION_MOVE -> if (pressing && (abs(event.x - downX) > slop || abs(event.y - downY) > slop)) cancelPress()
+            MotionEvent.ACTION_UP -> {
+                val wasTap = pressing && !held
+                cancelPress()
+                if (wasTap) onTap()
+            }
+            MotionEvent.ACTION_CANCEL -> cancelPress()
+        }
+        return true
+    }
+
+    private fun cancelPress() {
+        timer.removeCallbacks(hold)
+        if (pressing) alpha = alphaBeforePress
+        pressing = false
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelPress()
+        super.onDetachedFromWindow()
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        onTap()
+        return true
+    }
+
+    /** For tests and accessibility: the visible state line. */
+    val stateText: TextView get() = state
+}
