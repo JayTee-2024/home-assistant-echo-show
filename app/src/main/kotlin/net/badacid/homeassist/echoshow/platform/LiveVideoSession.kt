@@ -91,6 +91,7 @@ class LiveVideoSession(
     private var peer: PeerConnection? = null
     private var offer: Closeable? = null
     private var audio: AudioTrack? = null
+    private var video: VideoTrack? = null
     private var isMuted = true
     private var answered = false
     private val waitingCandidates = mutableListOf<IceCandidate>()
@@ -101,6 +102,8 @@ class LiveVideoSession(
     private val timeout = Runnable { move(LiveEvent.TIMED_OUT) }
 
     fun start() {
+        // One session per object: a second start would make a second peer.
+        if (setUp != null || released) return
         move(LiveEvent.START)
         main.postDelayed(timeout, LIVE_PICTURE_TIMEOUT_MS)
         setUp = scope.launch {
@@ -124,6 +127,8 @@ class LiveVideoSession(
             .filter { it.mimeType.equals("video/H264", ignoreCase = true) }
         if (h264.isNotEmpty()) video.setCodecPreferences(h264)
         created.createOffer(sdp { description ->
+            // Posted: the session may have been released (and the peer freed) in the meantime.
+            if (released) return@sdp
             created.setLocalDescription(sdp { }, description)
             main.postDelayed({ sendOffer() }, GATHERING_LIMIT_MS)
         }, MediaConstraints())
@@ -183,9 +188,16 @@ class LiveVideoSession(
         } catch (_: Exception) {
         }
         offer = null
-        peer?.close()
-        peer = null
+        video?.removeSink(renderer)
+        video = null
         audio = null
+        // close() only ends the call; dispose() frees the native peer and its hold on this object (and so on
+        // the connection and the activity). Without it every session stays in memory.
+        peer?.let {
+            it.close()
+            it.dispose()
+        }
+        peer = null
         // The renderer must let go of its decoder surface, or the next session's picture can stay black.
         renderer.release()
     }
@@ -204,8 +216,13 @@ class LiveVideoSession(
 
         override fun onTrack(transceiver: RtpTransceiver) {
             when (val track = transceiver.receiver.track()) {
-                is VideoTrack -> main.post { if (!released) track.addSink(renderer) }
+                is VideoTrack -> main.post {
+                    if (released) return@post
+                    video = track
+                    track.addSink(renderer)
+                }
                 is AudioTrack -> main.post {
+                    if (released) return@post
                     audio = track
                     track.setEnabled(!isMuted)
                 }

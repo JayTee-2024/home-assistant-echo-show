@@ -14,7 +14,10 @@ private const val SERVICE_TYPE = "_home-assistant._tcp."
  * else the host and port it was found at, else its `base_url`. Null when there is nothing usable.
  */
 fun addressFromService(host: String?, port: Int, txt: Map<String, String>): String? {
-    fun httpUrl(value: String?) = value?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+    // A .local name is no use: Android 11 cannot look one up, which is why this search exists.
+    fun httpUrl(value: String?) = value?.trim()?.trimEnd('/')
+        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        ?.takeUnless { java.net.URI(it).host?.endsWith(".local") ?: true }
     httpUrl(txt["internal_url"])?.let { return it }
     if (host != null && port > 0) {
         val shownHost = if (':' in host) "[$host]" else host

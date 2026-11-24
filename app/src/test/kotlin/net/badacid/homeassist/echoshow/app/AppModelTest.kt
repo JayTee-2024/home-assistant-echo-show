@@ -328,6 +328,17 @@ class AppModelTest {
     }
 
     @Test
+    fun `while locked nothing can open over the lock screen`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.setPin("1234")
+        model.lock()
+        model.holdCard("device:dev_lifx_lamp")
+        model.openSettings()
+        model.openReorganise()
+        assertEquals(Overlay.None, model.state.value.overlay)
+    }
+
+    @Test
     fun `signing out from the lock screen removes the PIN and the lock`() = runTest {
         val (model, _) = connectedModel()
         model.setPin("1234")

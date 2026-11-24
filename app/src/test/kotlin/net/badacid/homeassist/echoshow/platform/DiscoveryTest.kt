@@ -21,4 +21,10 @@ class DiscoveryTest {
     fun `an internal_url that is not http is ignored`() {
         assertEquals("http://192.168.1.50:8123", addressFromService("192.168.1.50", 8123, mapOf("internal_url" to "junk")))
     }
+
+    @Test
+    fun `a dot-local internal_url is skipped, as Android 11 cannot look it up`() {
+        assertEquals("http://192.168.1.50:8123", addressFromService("192.168.1.50", 8123, mapOf("internal_url" to "http://homeassistant.local:8123")))
+        assertEquals(null, addressFromService(null, 0, mapOf("base_url" to "http://homeassistant.local:8123")))
+    }
 }

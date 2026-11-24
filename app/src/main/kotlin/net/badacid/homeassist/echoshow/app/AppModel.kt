@@ -132,13 +132,19 @@ class AppModel(
     private fun openPanel(deviceId: String) {
         // A card for a device Home Assistant no longer has has no panel to open.
         if (findDevice(flow.value.devices, deviceId) == null) return
-        publish { it.copy(overlay = Overlay.Panel(deviceId)) }
+        openOverlay(Overlay.Panel(deviceId))
     }
 
     /** The open connection, for live video, or null while there is none. */
     fun currentConnection(): HomeConnection? = connection
 
-    fun openSettings() = publish { it.copy(overlay = Overlay.Settings) }
+    fun openSettings() = openOverlay(Overlay.Settings)
+
+    /** Nothing opens while the PIN lock is up: a late tap or hold timer must not draw over the lock. */
+    private fun openOverlay(overlay: Overlay) {
+        if (flow.value.isLocked) return
+        publish { it.copy(overlay = overlay) }
+    }
 
     // ---- The PIN lock ----
 
@@ -158,7 +164,7 @@ class AppModel(
     fun unlock() = publish { it.copy(isLocked = false) }
 
     /** Settings' "Reorganise layout". */
-    fun openReorganise() = publish { it.copy(overlay = Overlay.Reorganise) }
+    fun openReorganise() = openOverlay(Overlay.Reorganise)
 
     /** The reorganise mode's Done: keeps the new layout and goes back to the home screen. */
     fun saveLayout(layout: Layout) {
