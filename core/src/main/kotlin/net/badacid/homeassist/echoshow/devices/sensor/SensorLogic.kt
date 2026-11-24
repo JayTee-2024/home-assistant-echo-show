@@ -21,4 +21,6 @@ object SensorLogic : DeviceLogic {
     override fun isActive(entity: EntityState) = false
 
     override fun summary(entity: EntityState) = sensorText(readSensor(entity))
+
+    override fun panel(entity: EntityState) = sensorPanel(entity)
 }

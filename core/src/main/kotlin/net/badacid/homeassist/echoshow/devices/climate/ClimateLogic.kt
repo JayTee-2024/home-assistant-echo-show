@@ -31,4 +31,6 @@ object ClimateLogic : DeviceLogic {
         if (view.hvacMode == "off" || view.targetTemperature == null) return "$room · Off"
         return room + " → " + formatTemperature(view.targetTemperature)
     }
+
+    override fun panel(entity: EntityState) = climatePanel(entity)
 }

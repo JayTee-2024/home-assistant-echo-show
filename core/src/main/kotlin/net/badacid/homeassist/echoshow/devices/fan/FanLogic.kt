@@ -27,4 +27,6 @@ object FanLogic : DeviceLogic {
         if (!view.isOn) return "Off"
         return if (view.speedPercent == null) "On" else "On · ${view.speedPercent}%"
     }
+
+    override fun panel(entity: EntityState) = fanPanel(entity)
 }
