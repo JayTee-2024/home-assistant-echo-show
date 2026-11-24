@@ -27,6 +27,9 @@ enum class Phase {
 sealed interface Overlay {
     data object None : Overlay
     data object Settings : Overlay
+
+    /** The "Reorganise layout" mode, opened from Settings. */
+    data object Reorganise : Overlay
     data class Panel(val deviceId: String) : Overlay
 }
 

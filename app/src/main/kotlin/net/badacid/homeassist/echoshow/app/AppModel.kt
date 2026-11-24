@@ -19,6 +19,7 @@ import net.badacid.homeassist.echoshow.core.Device
 import net.badacid.homeassist.echoshow.core.EMPTY_HOME
 import net.badacid.homeassist.echoshow.core.HomeConnection
 import net.badacid.homeassist.echoshow.core.HomeSnapshot
+import net.badacid.homeassist.echoshow.core.Layout
 import net.badacid.homeassist.echoshow.core.OpenFailed
 import net.badacid.homeassist.echoshow.core.OpenFailure
 import net.badacid.homeassist.echoshow.core.PendingStates
@@ -136,6 +137,15 @@ class AppModel(
     fun currentConnection(): HomeConnection? = connection
 
     fun openSettings() = publish { it.copy(overlay = Overlay.Settings) }
+
+    /** Settings' "Reorganise layout". */
+    fun openReorganise() = publish { it.copy(overlay = Overlay.Reorganise) }
+
+    /** The reorganise mode's Done: keeps the new layout and goes back to the home screen. */
+    fun saveLayout(layout: Layout) {
+        updateSaved { it.copy(layout = layout) }
+        publish { it.copy(overlay = Overlay.None) }
+    }
 
     fun closeOverlay() = publish { it.copy(overlay = Overlay.None) }
 

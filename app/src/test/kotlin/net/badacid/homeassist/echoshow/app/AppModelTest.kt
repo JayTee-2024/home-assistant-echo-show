@@ -260,6 +260,18 @@ class AppModelTest {
     }
 
     @Test
+    fun `Reorganise opens over the home screen and saving the new layout closes it`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.openSettings()
+        model.openReorganise()
+        assertEquals(Overlay.Reorganise, model.state.value.overlay)
+        val moved = net.badacid.homeassist.echoshow.core.Layout(listOf(net.badacid.homeassist.echoshow.core.CardPlace("device:dev_lifx_lamp", 0, 3, 2, CardSize.SMALL)))
+        model.saveLayout(moved)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        assertEquals(moved, model.state.value.saved.layout)
+    }
+
+    @Test
     fun `a card for a device Home Assistant no longer has is removed on tap, and a hold does nothing`() = runTest {
         val (model, _) = connectedModel("device:gone" to CardSize.SMALL, "device:dev_lifx_lamp" to CardSize.SMALL)
         model.holdCard("device:gone")

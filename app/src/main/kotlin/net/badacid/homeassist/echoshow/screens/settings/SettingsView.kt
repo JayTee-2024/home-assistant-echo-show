@@ -34,6 +34,9 @@ data class SettingsScreenState(
 interface SettingsCallbacks {
     fun onClose()
 
+    /** Leaves Settings for the "Reorganise layout" mode. */
+    fun onReorganise()
+
     /** Adds the device's card, or removes it. For a device with nothing supported, the app says so. */
     fun onToggleDevice(device: Device)
     fun onSignOut()
@@ -70,16 +73,21 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
         val nav = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16f), dp(8f), dp(8f), dp(16f))
+            fun sectionButton(label: String, onPress: () -> Unit) = Theme.text(context, label, Theme.BODY_SP, Theme.TEXT_DIM).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                minHeight = dp(Theme.TOUCH_DP)
+                setPadding(dp(16f), 0, dp(16f), 0)
+                isClickable = true
+                setOnClickListener { onPress() }
+            }
             for (each in Section.entries) {
-                val button = Theme.text(context, each.label, Theme.BODY_SP).apply {
-                    gravity = Gravity.CENTER_VERTICAL
-                    minHeight = dp(Theme.TOUCH_DP)
-                    setPadding(dp(16f), 0, dp(16f), 0)
-                    isClickable = true
-                    setOnClickListener { open(each) }
-                }
+                val button = sectionButton(each.label) { open(each) }
                 sectionButtons[each] = button
                 addView(button, Widgets.matchWidth().apply { bottomMargin = dp(4f) })
+                // As in the LG app, "Reorganise layout" sits under Devices and leaves Settings.
+                if (each == Section.DEVICES) {
+                    addView(sectionButton("Reorganise layout") { callbacks.onReorganise() }, Widgets.matchWidth().apply { bottomMargin = dp(4f) })
+                }
             }
             addView(version, Widgets.matchWidth().apply { topMargin = dp(16f); leftMargin = dp(16f) })
         }

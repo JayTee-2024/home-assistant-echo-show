@@ -40,6 +40,7 @@ import net.badacid.homeassist.echoshow.screens.panel.PanelView
 import net.badacid.homeassist.echoshow.screens.settings.SettingsCallbacks
 import net.badacid.homeassist.echoshow.screens.settings.SettingsScreenState
 import net.badacid.homeassist.echoshow.screens.settings.SettingsView
+import net.badacid.homeassist.echoshow.screens.reorganise.ReorganiseView
 import net.badacid.homeassist.echoshow.screens.signin.SignInFlow
 import net.badacid.homeassist.echoshow.screens.signin.SignInView
 
@@ -149,6 +150,8 @@ class MainActivity : Activity() {
             val view: View? = when (overlay) {
                 Overlay.None -> null
                 Overlay.Settings -> SettingsView(this, settingsCallbacks).also { settingsView = it }
+                // Made once with the layout as it is; the person's moves stay in it until Done.
+                Overlay.Reorganise -> ReorganiseView(this, state.saved.layout, state.devices, state.shownHome) { model.saveLayout(it) }
                 is Overlay.Panel -> findDevice(state.devices, overlay.deviceId)?.let { device ->
                     if (isFullScreen(device)) {
                         cameraView(state).apply { show(device, state.shownHome) }
@@ -168,7 +171,7 @@ class MainActivity : Activity() {
                 (overlayView as? PanelView)?.show(device, state.shownHome)
                 (overlayView as? CameraView)?.show(device, state.shownHome)
             }
-            Overlay.None -> Unit
+            Overlay.None, Overlay.Reorganise -> Unit
         }
     }
 
@@ -230,6 +233,7 @@ class MainActivity : Activity() {
 
     private val settingsCallbacks = object : SettingsCallbacks {
         override fun onClose() = model.closeOverlay()
+        override fun onReorganise() = model.openReorganise()
         override fun onToggleDevice(device: Device) = model.toggleDevice(device)
         override fun onSignOut() = model.signOut()
         override fun onOpenLink(address: String) {
@@ -250,7 +254,8 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         when (model.state.value.phase) {
             Phase.SIGNED_OUT -> signInFlow?.back()
-            Phase.HOME -> model.back()
+            // Back in the reorganise mode keeps the result, as Done does.
+            Phase.HOME -> (overlayView as? ReorganiseView)?.done() ?: model.back()
             else -> Unit
         }
     }

@@ -33,6 +33,7 @@ class SettingsViewTest {
     private val calls = mutableListOf<String>()
     private val callbacks = object : SettingsCallbacks {
         override fun onClose() { calls += "close" }
+        override fun onReorganise() { calls += "reorganise" }
         override fun onToggleDevice(device: Device) { calls += "toggle ${device.id}" }
         override fun onSignOut() { calls += "sign out" }
         override fun onOpenLink(address: String) { calls += "open $address" }
@@ -76,6 +77,12 @@ class SettingsViewTest {
         view.show(state().copy(layout = Layout(state().layout.cards + CardPlace("device:dev_lifx_ceiling", 0, 1, 0, CardSize.SMALL))))
         laidOut(view)
         assertTrue(visibleTexts(view.rowWith("Kitchen ceiling")).contains("On screen ✓"))
+    }
+
+    @Test
+    fun `Reorganise layout leaves Settings for the reorganise mode`() {
+        settings().withText("Reorganise layout").performClick()
+        assertEquals(listOf("reorganise"), calls)
     }
 
     @Test
