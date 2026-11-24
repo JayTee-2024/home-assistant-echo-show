@@ -13,6 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -23,6 +24,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    sourceSets["test"].resources.srcDir("../fixtures")
 
     testOptions {
         unitTests.all { it.useJUnitPlatform() }
@@ -37,8 +40,16 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.okhttp)
+    implementation(libs.coroutines.android)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.coroutines.test)
+    testImplementation(libs.mockwebserver)
     testRuntimeOnly(libs.junit.launcher)
+
+    // On-device tests only (the keystore); the app itself uses no AndroidX library.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 }

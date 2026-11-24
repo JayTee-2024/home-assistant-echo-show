@@ -24,6 +24,8 @@ dependencies {
     testRuntimeOnly(libs.junit.launcher)
 }
 
+sourceSets["test"].resources.srcDir("../fixtures")
+
 tasks.test {
     useJUnitPlatform()
 }
