@@ -328,6 +328,25 @@ class AppModelTest {
     }
 
     @Test
+    fun `wrong PIN tries are saved, so restarting the app does not reset them, and unlocking clears them`() = runTest {
+        attempts += { FakeConnection() }
+        val storage = savedWith(pin = "1234")
+        val model = model(storage)
+        model.start()
+        runCurrent()
+        model.notePinTries(6, 500_000L)
+        attempts += { FakeConnection() }
+        val restarted = model(storage)
+        restarted.start()
+        runCurrent()
+        assertEquals(6, restarted.state.value.saved.pinWrongTries)
+        assertEquals(500_000L, restarted.state.value.saved.pinWaitUntil)
+        restarted.unlock()
+        assertEquals(0, restarted.state.value.saved.pinWrongTries)
+        assertEquals(0L, restarted.state.value.saved.pinWaitUntil)
+    }
+
+    @Test
     fun `while locked nothing can open over the lock screen`() = runTest {
         val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
         model.setPin("1234")

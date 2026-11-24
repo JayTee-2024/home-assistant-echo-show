@@ -20,6 +20,17 @@ import kotlin.coroutines.resumeWithException
 private val JSON = "application/json; charset=utf-8".toMediaType()
 
 /**
+ * The client for everything sent to Home Assistant. It never follows a redirect: a 307 or 308 would send the
+ * same request, with the password or a token in it, on to whatever address the answer named.
+ */
+fun homeAssistantClient(): OkHttpClient = OkHttpClient.Builder()
+    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+    .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
+
+/**
  * The app's HTTP sender (core's HttpSend) on OkHttp. Every failure, including an address OkHttp cannot
  * use, comes out as an IOException, which core treats as "nothing answered".
  */

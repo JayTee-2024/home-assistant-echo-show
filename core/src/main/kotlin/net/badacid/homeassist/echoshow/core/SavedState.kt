@@ -29,6 +29,9 @@ data class SavedState(
     val pin: String?,
     /** Seconds without a touch before the screen blanks; 0 never (see ScreenSaver.kt). */
     val blankAfterSeconds: Int = DEFAULT_BLANK_AFTER_SECONDS,
+    /** Wrong PIN tries in a row, and when the wait after them ends (see PinLock.kt). Cleared by unlocking. */
+    val pinWrongTries: Int = 0,
+    val pinWaitUntil: Long = 0,
 )
 
 val EMPTY_SAVED_STATE = SavedState(signIn = null, layout = EMPTY_LAYOUT, layoutAddress = null, pin = null)
@@ -73,6 +76,8 @@ fun serialiseSavedState(state: SavedState): String {
         put("layoutAddress", state.layoutAddress)
         put("pin", state.pin)
         put("blankAfterSeconds", state.blankAfterSeconds)
+        put("pinWrongTries", state.pinWrongTries)
+        put("pinWaitUntil", state.pinWaitUntil)
     }.toString()
 }
 
@@ -96,6 +101,8 @@ fun parseSavedState(text: String?): SavedState {
         pin = if (pin != null && isValidPin(pin)) pin else null,
         // Absent in data saved before screen blanking existed: the original Echo app's 30 seconds.
         blankAfterSeconds = wholeNumberOrNull(saved["blankAfterSeconds"])?.toInt()?.takeIf { it >= 0 } ?: DEFAULT_BLANK_AFTER_SECONDS,
+        pinWrongTries = wholeNumberOrNull(saved["pinWrongTries"])?.toInt()?.coerceAtLeast(0) ?: 0,
+        pinWaitUntil = wholeNumberOrNull(saved["pinWaitUntil"])?.coerceAtLeast(0) ?: 0,
     )
 }
 
@@ -113,7 +120,7 @@ fun afterSignIn(state: SavedState, signIn: SavedSignIn): SavedState {
  * guards a sign-in, and signing out is the way past a forgotten PIN.
  */
 fun afterSignOut(state: SavedState): SavedState =
-    state.copy(signIn = null, pin = null)
+    state.copy(signIn = null, pin = null, pinWrongTries = 0, pinWaitUntil = 0)
 
 private fun readSignIn(value: JsonElement?): SavedSignIn? {
     val item = value as? JsonObject ?: return null

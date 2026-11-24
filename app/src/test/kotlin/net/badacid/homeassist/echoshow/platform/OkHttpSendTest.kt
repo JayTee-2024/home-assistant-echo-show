@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import net.badacid.homeassist.echoshow.core.HttpAnswer
 import net.badacid.homeassist.echoshow.core.HttpRequest
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
@@ -65,5 +66,25 @@ class OkHttpSendTest {
         val error = assertThrows<IOException> { send(HttpRequest("GET", "http://192.168.1..100:8123/auth/login_flow")) }
         assertEquals("Not a usable address", error.message)
         assertThrows<IOException> { send(HttpRequest("GET", "not a url at all")) }
+    }
+
+    @Test
+    fun `the app's client never follows a redirect, so a password or token cannot be sent on to another server`() = runTest {
+        val other = MockWebServer().apply { start() }
+        val careful = OkHttpSend(homeAssistantClient())
+        for (code in listOf(302, 307, 308)) {
+            server.enqueue(MockResponse().setResponseCode(code).setHeader("Location", other.url("/elsewhere")))
+            val answer = careful(HttpRequest("POST", url("/auth/login_flow/x"), jsonBody = buildJsonObject { put("password", JsonPrimitive("secret")) }))
+            assertEquals(code, answer.status)
+        }
+        assertEquals(0, other.requestCount)
+        other.shutdown()
+    }
+
+    @Test
+    fun `a picture larger than the limit is refused, and one within it is read`() {
+        fun body(size: Int) = ByteArray(size).toResponseBody()
+        assertEquals(100, readLimited(body(100), 100)?.size)
+        assertEquals(null, readLimited(body(101), 100))
     }
 }

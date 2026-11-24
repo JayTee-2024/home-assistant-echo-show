@@ -69,7 +69,32 @@ class PinLockTest {
         repeat(MAX_WRONG_TRIES) { entry = type(entry, "9999", "1234").entry }
         val later = now + WAIT_AFTER_WRONG_MS
         entry = type(entry, "9999", "1234", later).entry
-        assertEquals(later + WAIT_AFTER_WRONG_MS, entry.waitUntil)
+        assertEquals(later + 2 * WAIT_AFTER_WRONG_MS, entry.waitUntil)
+    }
+
+    @Test
+    fun `the wait doubles with each further wrong try, up to 15 minutes`() {
+        var entry = EMPTY_PIN_ENTRY
+        var time = now
+        val waits = mutableListOf<Long>()
+        repeat(MAX_WRONG_TRIES + 7) {
+            entry = type(entry, "9999", "1234", time).entry
+            if (entry.waitUntil > 0) waits += entry.waitUntil - time
+            time = maxOf(time, entry.waitUntil)
+        }
+        assertEquals(listOf(30_000L, 60_000L, 120_000L, 240_000L, 480_000L, 900_000L, 900_000L, 900_000L), waits)
+    }
+
+    @Test
+    fun `a wait far in the future, as after the clock changed, counts as the longest wait`() {
+        val entry = PinEntry("", 9, now + 10 * 60 * 60 * 1000L)
+        assertEquals(900, secondsToWait(entry, now))
+        assertEquals(PinResult.WAITING, type(entry, "1234", "1234", now).result)
+        // The lock screen settles such a wait when it appears, so it does end.
+        val settled = settleWait(entry, now)
+        assertEquals(now + 900_000, settled.waitUntil)
+        assertEquals(PinResult.UNLOCKED, type(settled, "1234", "1234", now + 900_000).result)
+        assertEquals(PinEntry("", 3, now + 5_000), settleWait(PinEntry("", 3, now + 5_000), now))
     }
 
     @Test

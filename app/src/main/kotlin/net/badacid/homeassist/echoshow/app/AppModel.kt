@@ -152,7 +152,7 @@ class AppModel(
     fun setBlankAfter(seconds: Int) = updateSaved { it.copy(blankAfterSeconds = seconds.coerceAtLeast(0)) }
 
     /** Settings' PIN section: a new PIN, or null to turn the lock off. */
-    fun setPin(pin: String?) = updateSaved { it.copy(pin = pin) }
+    fun setPin(pin: String?) = updateSaved { it.copy(pin = pin, pinWrongTries = 0, pinWaitUntil = 0) }
 
     /** Locks the app (it left the screen), closing whatever was open. Does nothing without a PIN. */
     fun lock() {
@@ -160,8 +160,17 @@ class AppModel(
         publish { it.copy(isLocked = true, overlay = Overlay.None) }
     }
 
-    /** The lock screen took the right PIN. */
-    fun unlock() = publish { it.copy(isLocked = false) }
+    /** The lock screen took the right PIN: the wrong tries are forgotten. */
+    fun unlock() {
+        notePinTries(0, 0)
+        publish { it.copy(isLocked = false) }
+    }
+
+    /** The lock screen's wrong tries and wait, saved so that restarting the Echo does not reset them. */
+    fun notePinTries(wrongTries: Int, waitUntil: Long) {
+        if (saved.pinWrongTries == wrongTries && saved.pinWaitUntil == waitUntil) return
+        updateSaved { it.copy(pinWrongTries = wrongTries, pinWaitUntil = waitUntil) }
+    }
 
     /** Settings' "Reorganise layout". */
     fun openReorganise() = openOverlay(Overlay.Reorganise)

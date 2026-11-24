@@ -43,6 +43,8 @@ data class SignInUiState(
     val typedToken: String? = null,
     /** Counts Home Assistant's answers; the view clears the password and code on each one. */
     val answers: Int = 0,
+    /** The address came from looking on the network, not from the person: the screen asks them to check it. */
+    val foundOnNetwork: Boolean = false,
 ) {
     /** The address as shown: without http://, but an https address in full. */
     val shownAddress: String get() = if (address.startsWith("http://")) address.removePrefix("http://") else address
@@ -91,7 +93,7 @@ class SignInFlow(
             val found = looker()
             if (request != thisRequest) return@launch
             if (found != null) {
-                tryAddress(found)
+                tryAddress(found, found = true)
             } else {
                 goTo(SignInForm.ADDRESS)
                 flow.value = flow.value.copy(typedAddress = "", message = notice)
@@ -130,7 +132,7 @@ class SignInFlow(
     fun goToToken() = goTo(SignInForm.TOKEN)
 
     /** "Back to username and password" on the token form. */
-    fun backToCredentials() = tryAddress(flow.value.address)
+    fun backToCredentials() = tryAddress(flow.value.address, flow.value.foundOnNetwork)
 
     fun signIn(username: String, password: String) {
         // Already waiting for Home Assistant: a second press (or the keyboard's Done) would reuse the flow.
@@ -166,8 +168,8 @@ class SignInFlow(
         SignInForm.LOOKING, SignInForm.ADDRESS -> false
     }
 
-    private fun tryAddress(candidate: String) {
-        flow.value = flow.value.copy(address = candidate, form = SignInForm.LOOKING, message = notice, busy = false)
+    private fun tryAddress(candidate: String, found: Boolean = false) {
+        flow.value = flow.value.copy(address = candidate, form = SignInForm.LOOKING, message = notice, busy = false, foundOnNetwork = found)
         ask(candidate) { beginSignIn(send, candidate) }
     }
 
