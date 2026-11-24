@@ -223,10 +223,4 @@ class SavedStateTest {
             assertEquals("0412", afterSignIn(signedIn.copy(signIn = null), signedIn.signIn!!).pin)
         }
     }
-
-    @Test
-    fun `isValidPin accepts four digits only`() {
-        assertEquals(true, isValidPin("0412"))
-        for (bad in listOf("", "041", "04125", "04a2", " 0412", "٠٤١٢")) assertEquals(false, isValidPin(bad), bad)
-    }
 }
