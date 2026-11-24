@@ -10,15 +10,9 @@ import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import net.badacid.homeassist.echoshow.app.AppState
-import net.badacid.homeassist.echoshow.app.Phase
 import net.badacid.homeassist.echoshow.core.CardPlace
 import net.badacid.homeassist.echoshow.core.CardSize
-import net.badacid.homeassist.echoshow.core.ConnectionStatus
-import net.badacid.homeassist.echoshow.core.EMPTY_SAVED_STATE
 import net.badacid.homeassist.echoshow.core.Layout
-import net.badacid.homeassist.echoshow.core.SavedSignIn
-import net.badacid.homeassist.echoshow.core.SignInKind
 import net.badacid.homeassist.echoshow.core.buildDevices
 import net.badacid.homeassist.echoshow.devices.DEVICE_LOGIC
 import net.badacid.homeassist.echoshow.screens.snapshot
@@ -64,18 +58,14 @@ class HomeViewTest {
     )
     private val twoPages = firstPage + CardPlace("device:dev_plug_tv", 1, 0, 0, CardSize.SMALL)
 
-    private fun state(cards: List<CardPlace> = twoPages, page: Int = 0, status: ConnectionStatus = ConnectionStatus.CONNECTED, toast: String? = null) = AppState(
-        phase = Phase.HOME,
-        saved = EMPTY_SAVED_STATE.copy(
-            signIn = SavedSignIn("http://192.168.1.100:8123", SignInKind.LONG_LIVED_TOKEN, "t", "", 0),
-            layout = Layout(cards),
-        ),
-        shownHome = home,
+    private fun state(cards: List<CardPlace> = twoPages, page: Int = 0, reconnecting: Boolean = false, toast: String? = null) = HomeScreenState(
+        layout = Layout(cards),
+        home = home,
         devices = buildDevices(home, DEVICE_LOGIC),
-        status = status,
+        homeAddress = "http://192.168.1.100:8123",
+        isReconnecting = reconnecting,
         page = page,
         toast = toast,
-        userName = "Simon",
     )
 
     private fun laidOut(view: View) {
@@ -159,7 +149,7 @@ class HomeViewTest {
         home.show(state())
         laidOut(home)
         assertTrue(banner !in texts(home))
-        home.show(state(status = ConnectionStatus.RECONNECTING))
+        home.show(state(reconnecting = true))
         laidOut(home)
         assertTrue(banner in texts(home))
     }
@@ -186,7 +176,7 @@ class HomeViewTest {
 
     @Test
     fun screenshots() {
-        fun shot(name: String, state: AppState) {
+        fun shot(name: String, state: HomeScreenState) {
             val home = view()
             home.show(state)
             laidOut(home)
@@ -194,7 +184,7 @@ class HomeViewTest {
         }
         shot("home", state())
         shot("home-empty", state(cards = emptyList()))
-        shot("home-reconnecting", state(status = ConnectionStatus.RECONNECTING))
+        shot("home-reconnecting", state(reconnecting = true))
         shot("home-toast", state(toast = "Living room heating did not respond."))
     }
 

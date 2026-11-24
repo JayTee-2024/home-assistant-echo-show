@@ -9,9 +9,9 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
-import net.badacid.homeassist.echoshow.app.AppState
 import net.badacid.homeassist.echoshow.core.CardPlace
-import net.badacid.homeassist.echoshow.core.ConnectionStatus
+import net.badacid.homeassist.echoshow.core.Device
+import net.badacid.homeassist.echoshow.core.HomeSnapshot
 import net.badacid.homeassist.echoshow.core.Layout
 import net.badacid.homeassist.echoshow.core.cardsOnPage
 import net.badacid.homeassist.echoshow.core.findDevice
@@ -19,6 +19,17 @@ import net.badacid.homeassist.echoshow.core.pageCount
 import net.badacid.homeassist.echoshow.screens.Icons
 import net.badacid.homeassist.echoshow.screens.Theme
 import net.badacid.homeassist.echoshow.screens.Widgets
+
+/** What the home screen draws. The app makes it from its AppState (screens do not depend on the app). */
+data class HomeScreenState(
+    val layout: Layout,
+    val home: HomeSnapshot,
+    val devices: List<Device>,
+    val homeAddress: String,
+    val isReconnecting: Boolean,
+    val page: Int,
+    val toast: String?,
+)
 
 /** What the home screen asks of the app. */
 interface HomeCallbacks {
@@ -81,9 +92,9 @@ class HomeView(
         addView(toast, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(48f) })
     }
 
-    fun show(state: AppState) {
-        val layout = state.saved.layout
-        val reconnecting = state.status == ConnectionStatus.RECONNECTING
+    fun show(state: HomeScreenState) {
+        val layout = state.layout
+        val reconnecting = state.isReconnecting
         banner.visibility = if (reconnecting) VISIBLE else GONE
 
         val isEmpty = layout.cards.isEmpty()
@@ -92,16 +103,15 @@ class HomeView(
         dots.visibility = if (isEmpty) GONE else VISIBLE
 
         if (layout != shownLayout) {
-            rebuildPages(layout, state)
+            homeAddress = state.homeAddress
+            rebuildPages(layout)
             shownLayout = layout
         }
-        val homeAddress = state.saved.signIn?.address.orEmpty()
         for ((place, card) in cards) {
-            card.show(cardContent(place.deviceId, findDevice(state.devices, place.deviceId), state.shownHome, place.size))
+            card.show(cardContent(place.deviceId, findDevice(state.devices, place.deviceId), state.home, place.size))
             // While the connection is down, every card shows its last known state, dimmed.
             card.stale = reconnecting
         }
-        if (homeAddress != this.homeAddress) this.homeAddress = homeAddress
 
         val pages = pageCount(layout)
         pager.showPage(state.page, animate = shownPage >= 0)
@@ -114,8 +124,7 @@ class HomeView(
 
     private var homeAddress = ""
 
-    private fun rebuildPages(layout: Layout, state: AppState) {
-        homeAddress = state.saved.signIn?.address.orEmpty()
+    private fun rebuildPages(layout: Layout) {
         val old = cards.toMap()
         cards.clear()
         val grids = (0 until pageCount(layout)).map { page ->
