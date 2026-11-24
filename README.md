@@ -26,8 +26,8 @@ scripts/setup-android-sdk.sh        # only if you have no Android SDK; installs 
 
 - `core/`: the app's logic in plain Kotlin, tested on the JVM.
 - `app/`: the Android app: `platform/` (network, storage, live video), `screens/`, and `app/` which joins them.
-- `docs/`: the install guide, how to release ([docs/releasing.md](docs/releasing.md)), pictures of every
-  screen (`docs/screens/`), and the design and plans (`docs/superpowers/`).
+- `docs/`: the install guide, how to release ([docs/releasing.md](docs/releasing.md)), and pictures of
+  every screen (`docs/screens/`).
 
 Builds are signed with the key in `signing/` when it is there (see docs/releasing.md), and otherwise with
 your machine's debug key.
