@@ -270,12 +270,51 @@ private class HomeAssistantConnection(
 
     // ---- After a drop ----
 
-    /** Called when a working session ends by itself. */
+    /**
+     * Called when a working session ends by itself: keeps trying to connect again, with growing waits, until
+     * it works, the sign-in is refused, or the connection is closed. Each attempt refreshes the tokens
+     * first if they have run out, and loads the whole home afresh.
+     */
     private fun onSessionLost(lost: Session) {
         synchronized(lock) {
             if (isClosed || session !== lost) return
             session = null
             statusFlow.value = ConnectionStatus.RECONNECTING
+            reconnecting = scope.launch { reconnect() }
+        }
+    }
+
+    private suspend fun reconnect() {
+        var attempt = 0
+        while (true) {
+            delay(reconnectDelay(attempt))
+            if (synchronized(lock) { isClosed }) return
+            val (fresh, loaded) = try {
+                connect()
+            } catch (failed: OpenFailed) {
+                if (failed.failure == OpenFailure.SIGN_IN_REJECTED) {
+                    synchronized(lock) { if (!isClosed) statusFlow.value = ConnectionStatus.SIGN_IN_REJECTED }
+                    return
+                }
+                attempt += 1
+                continue
+            }
+            val kept = synchronized(lock) {
+                if (isClosed) {
+                    false
+                } else {
+                    session = fresh
+                    homeFlow.value = loaded.home.copy(states = fresh.states)
+                    statusFlow.value = ConnectionStatus.CONNECTED
+                    true
+                }
+            }
+            if (!kept) {
+                fresh.close()
+                return
+            }
+            fresh.markWorking()
+            return
         }
     }
 

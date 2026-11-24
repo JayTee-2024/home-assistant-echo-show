@@ -25,12 +25,31 @@ class FakeHomeAssistant : AutoCloseable {
     val home = FakeHome.fromFixtures()
     private val server = MockWebServer()
     private val serverSockets = mutableListOf<WebSocket>()
+    @Volatile private var isDown = false
+
+    /** When each WebSocket was asked for, in milliseconds, in order. */
+    val socketAttempts = mutableListOf<Long>()
+
+    /** Refuses new WebSockets (as a restarting Home Assistant does) and closes the open ones. */
+    fun goDown() {
+        isDown = true
+        dropConnections()
+    }
+
+    /** Accepts WebSockets again. */
+    fun comeBack() {
+        isDown = false
+    }
 
     init {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.path ?: "/"
-                if (path == "/api/websocket") return MockResponse().withWebSocketUpgrade(socketListener())
+                if (path == "/api/websocket") {
+                    synchronized(socketAttempts) { socketAttempts += System.currentTimeMillis() }
+                    if (isDown) return MockResponse().setResponseCode(503).setBody("Home Assistant is starting")
+                    return MockResponse().withWebSocketUpgrade(socketListener())
+                }
                 val answer = home.handleHttp(request.method ?: "GET", path, readBody(request))
                 val response = MockResponse().setResponseCode(answer.status).setHeader("Content-Type", answer.contentType)
                 return if (answer.bytes != null) response.setBody(Buffer().write(answer.bytes)) else response.setBody(answer.json.toString())
