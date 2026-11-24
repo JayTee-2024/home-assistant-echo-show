@@ -93,6 +93,17 @@ class GridViewTest {
     }
 
     @Test
+    fun `the More button opens the panel`() {
+        var holds = 0
+        val view = card("device:dev_lifx_lamp", CardSize.SMALL, onHold = { holds++ })
+        laidOut(view, 300, 200)
+        val found = ArrayList<View>()
+        view.findViewsWithText(found, "More", View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
+        found.first().performClick()
+        assertEquals(1, holds)
+    }
+
+    @Test
     fun `moving the finger cancels the hold`() {
         var taps = 0
         var holds = 0

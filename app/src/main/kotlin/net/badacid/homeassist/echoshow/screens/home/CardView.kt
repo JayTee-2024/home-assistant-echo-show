@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import net.badacid.homeassist.echoshow.core.CardSize
 import net.badacid.homeassist.echoshow.screens.IconView
+import net.badacid.homeassist.echoshow.screens.Icons
 import net.badacid.homeassist.echoshow.screens.Theme
 import net.badacid.homeassist.echoshow.screens.Widgets
 import kotlin.math.abs
@@ -72,7 +73,15 @@ class CardView(
             addView(room, Widgets.matchWidth())
             addView(extras, Widgets.matchWidth())
         }
-        addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { rightMargin = dp(36f) })
+        // "More" opens the panel, as holding the card does: the same as the LG card's more button.
+        val more = FrameLayout(context).apply {
+            contentDescription = "More"
+            isClickable = true
+            setOnClickListener { onHold() }
+            addView(IconView(context, Icons.MORE, Theme.TEXT_DIM), LayoutParams(dp(26f), dp(26f), Gravity.CENTER))
+        }
+        addView(more, LayoutParams(dp(Theme.TOUCH_DP), dp(Theme.TOUCH_DP), Gravity.BOTTOM or Gravity.END).apply { rightMargin = -dp(12f); bottomMargin = -dp(12f) })
     }
 
     private var dimmed = false

@@ -143,7 +143,7 @@ class MainActivity : Activity() {
                 Overlay.None -> null
                 Overlay.Settings -> SettingsView(this, settingsCallbacks).also { settingsView = it }
                 is Overlay.Panel -> findDevice(state.devices, overlay.deviceId)?.let { device ->
-                    PanelView(this) { model.closeOverlay() }.apply { show(device, state.shownHome) }
+                    PanelView(this, { model.closeOverlay() }, { model.run(it) }).apply { show(device, state.shownHome) }
                 }
             }
             view?.let {
