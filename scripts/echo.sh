@@ -29,8 +29,11 @@ ensure_adb() {
     [ -x "$adb_bin" ] && return
     echo "Downloading Android's platform tools…"
     local zip="$deploy/platform-tools.zip"
-    curl -fsSL -o "$zip" https://dl.google.com/android/repository/platform-tools-latest-linux.zip ||
+    # A fixed version with its checksum, so what is run is what was checked. To update: change both.
+    curl -fsSL -o "$zip" https://dl.google.com/android/repository/platform-tools_r37.0.3-linux.zip ||
         fail "Could not download Android's platform tools from dl.google.com."
+    echo "214548146cadb2ca3508143d8a1d4be4c59de5bb837253e3ede89ed74cf450d1  $zip" | sha256sum -c --quiet - ||
+        { rm -f "$zip"; fail "The platform tools download does not match its checksum. Nothing was installed."; }
     python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip" "$deploy"
     rm -f "$zip"
     chmod +x "$adb_bin"

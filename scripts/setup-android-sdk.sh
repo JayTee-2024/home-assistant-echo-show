@@ -13,6 +13,8 @@ if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   mkdir -p "$SDK/cmdline-tools"
   tmp="$(mktemp -d)"
   curl -fsSL "https://dl.google.com/android/repository/$TOOLS_ZIP" -o "$tmp/tools.zip"
+  # The checksum of that exact file; change it together with TOOLS_ZIP.
+  echo "7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee  $tmp/tools.zip" | sha256sum -c --quiet - || { echo "The download does not match its checksum." >&2; rm -rf "$tmp"; exit 1; }
   unzip -q "$tmp/tools.zip" -d "$tmp"
   rm -rf "$SDK/cmdline-tools/latest"
   mv "$tmp/cmdline-tools" "$SDK/cmdline-tools/latest"
