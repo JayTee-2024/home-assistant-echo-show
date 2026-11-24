@@ -78,6 +78,8 @@ class SignInView(context: Context, private val flow: SignInFlow) : FrameLayout(c
             // Searching the network: there is no address yet.
             state.address.isEmpty() -> "Looking for Home Assistant on your network…"
             state.form == SignInForm.LOOKING -> "Looking for Home Assistant at"
+            // Anything on the network can say it is Home Assistant: the person should see where they are signing in.
+            state.foundOnNetwork -> "Found on your network. Check this is your Home Assistant:"
             else -> "Home Assistant found at"
         }
         addressValue.text = state.shownAddress
@@ -143,10 +145,20 @@ class SignInView(context: Context, private val flow: SignInFlow) : FrameLayout(c
                 main("Verify") { flow.verify(input.text.toString()) }
             }
             SignInForm.TOKEN -> {
-                val (view, input) = Widgets.field(context, "Long-lived access token", "Made on your profile page in Home Assistant, under Security") { flow.useToken(token!!.text.toString()) }
+                // Hidden as it is typed, like the password: the token is a key to the whole home.
+                val (view, input) = Widgets.field(context, "Long-lived access token", "Made on your profile page in Home Assistant, under Security", isPassword = true) { flow.useToken(token!!.text.toString()) }
                 input.setText(state.typedToken ?: "")
                 token = input
                 form.addView(view, Widgets.matchWidth())
+                var shown = false
+                lateinit var toggle: android.widget.TextView
+                toggle = Widgets.button(context, "Show", ButtonStyle.LINK) {
+                    shown = !shown
+                    input.transformationMethod = if (shown) null else android.text.method.PasswordTransformationMethod.getInstance()
+                    input.setSelection(input.text.length)
+                    toggle.text = if (shown) "Hide" else "Show"
+                }
+                form.addView(toggle, Widgets.wrap())
                 main("Connect") { flow.useToken(input.text.toString()) }
                 form.addView(Widgets.button(context, "Back to username and password", ButtonStyle.LINK) { flow.backToCredentials() }, Widgets.matchWidth(top = 8f))
             }

@@ -9,10 +9,10 @@ import net.badacid.homeassist.echoshow.core.HomeConnection
 import net.badacid.homeassist.echoshow.core.SavedSignIn
 import net.badacid.homeassist.echoshow.platform.KeystoreTextCipher
 import net.badacid.homeassist.echoshow.platform.SavedTextStore
+import net.badacid.homeassist.echoshow.platform.homeAssistantClient
 import net.badacid.homeassist.echoshow.platform.openHomeConnection
 import okhttp3.OkHttpClient
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 typealias ConnectionOpener = suspend (SavedSignIn, onTokens: (SavedSignIn) -> Unit) -> HomeConnection
 
@@ -29,9 +29,7 @@ class HomeAssistApp : Application() {
     /** When live view last stopped for each camera, for the picture labels. */
     val pictureUpdates = net.badacid.homeassist.echoshow.devices.camera.PictureUpdates()
 
-    val client: OkHttpClient by lazy {
-        OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
-    }
+    val client: OkHttpClient by lazy { homeAssistantClient() }
 
     /** The model's thread: the main thread, as AppModel requires. */
     private var mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

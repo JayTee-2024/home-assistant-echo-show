@@ -10,20 +10,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val SERVICE_TYPE = "_home-assistant._tcp."
 
 /**
- * The address to use for a Home Assistant found on the network: its own `internal_url` when it gives one,
- * else the host and port it was found at, else its `base_url`. Null when there is nothing usable.
+ * The address of a Home Assistant found on the network: the host and port the Echo itself resolved. What the
+ * announcement says about itself (its `internal_url` and `base_url`) is not used: anything on the network can
+ * announce anything, including an address somewhere else entirely. Null when there is nothing usable.
  */
-fun addressFromService(host: String?, port: Int, txt: Map<String, String>): String? {
-    // A .local name is no use: Android 11 cannot look one up, which is why this search exists.
-    fun httpUrl(value: String?) = value?.trim()?.trimEnd('/')
-        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-        ?.takeUnless { java.net.URI(it).host?.endsWith(".local") ?: true }
-    httpUrl(txt["internal_url"])?.let { return it }
-    if (host != null && port > 0) {
-        val shownHost = if (':' in host) "[$host]" else host
-        return "http://$shownHost:$port"
-    }
-    return httpUrl(txt["base_url"])
+fun addressFromService(host: String?, port: Int): String? {
+    if (host == null || port <= 0) return null
+    val shownHost = if (':' in host) "[$host]" else host
+    return "http://$shownHost:$port"
 }
 
 /**
@@ -42,8 +36,7 @@ suspend fun findHomeAssistant(context: Context, timeoutMs: Long = 6_000): String
             if (found.isCompleted || !resolving.compareAndSet(false, true)) return
             nsd.resolveService(service, object : NsdManager.ResolveListener {
                 override fun onServiceResolved(info: NsdServiceInfo) {
-                    val txt = info.attributes.mapValues { (_, bytes) -> bytes?.toString(Charsets.UTF_8) ?: "" }
-                    val address = addressFromService(info.host?.hostAddress, info.port, txt)
+                    val address = addressFromService(info.host?.hostAddress, info.port)
                     if (address != null) found.complete(address) else resolving.set(false)
                 }
 

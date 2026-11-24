@@ -44,7 +44,7 @@ class SavedStateTest {
         @Test
         fun `writes only the documented fields, in the LG app's names`() {
             val saved = Json.parseToJsonElement(serialiseSavedState(state)).jsonObject
-            assertEquals(listOf("blankAfterSeconds", "layout", "layoutAddress", "pin", "signIn", "version"), saved.keys.sorted())
+            assertEquals(listOf("blankAfterSeconds", "layout", "layoutAddress", "pin", "pinWaitUntil", "pinWrongTries", "signIn", "version"), saved.keys.sorted())
             assertEquals(JsonPrimitive(1), saved["version"])
             assertEquals(
                 listOf("accessToken", "address", "expiresAt", "kind", "refreshToken"),
@@ -246,5 +246,15 @@ class SavedStateTest {
         assertEquals(0, parseSavedState(serialiseSavedState(state.copy(blankAfterSeconds = 0))).blankAfterSeconds)
         val old = """{"version":1,"signIn":null,"layout":{"cards":[]},"layoutAddress":null,"pin":null}"""
         assertEquals(30, parseSavedState(old).blankAfterSeconds)
+    }
+
+    @Test
+    fun `keeps the wrong PIN tries and the wait, and they go with the PIN`() {
+        val state = EMPTY_SAVED_STATE.copy(pin = "1234", pinWrongTries = 6, pinWaitUntil = 99_000L)
+        val back = parseSavedState(serialiseSavedState(state))
+        assertEquals(6, back.pinWrongTries)
+        assertEquals(99_000L, back.pinWaitUntil)
+        assertEquals(0, afterSignOut(state).pinWrongTries)
+        assertEquals(0L, afterSignOut(state).pinWaitUntil)
     }
 }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -21,6 +23,32 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // One key signs every build, debug and release, so an update never needs an uninstall (which would wipe
+    // the sign-in, layout and PIN). The key is not in the repository: scripts/make-signing-key.sh makes it in
+    // signing/, which git ignores. Without it, builds still work, signed with this machine's debug key.
+    val signingFile = rootProject.file("signing/signing.properties")
+    val signing = Properties()
+    if (signingFile.exists()) signingFile.inputStream().use { signing.load(it) }
+    if (signingFile.exists()) {
+        signingConfigs.create("release") {
+            storeFile = rootProject.file("signing/" + signing.getProperty("storeFile"))
+            storePassword = signing.getProperty("storePassword")
+            keyAlias = signing.getProperty("keyAlias")
+            keyPassword = signing.getProperty("keyPassword")
+        }
+    } else {
+        logger.warn("No signing/signing.properties: using the debug key. Such a build cannot update a properly signed one.")
+    }
+    buildTypes {
+        val key = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        getByName("debug") { signingConfig = key }
+        getByName("release") {
+            signingConfig = key
+            // Not shrunk or renamed: a sideloaded app's crash report should stay readable.
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {

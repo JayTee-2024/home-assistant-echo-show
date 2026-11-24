@@ -206,4 +206,24 @@ class MainActivityTest {
         val wanted = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         assertEquals(wanted, flags and wanted)
     }
+
+    @Test
+    fun `with a PIN the window is marked secure and the app locks as soon as it is paused`() {
+        val secure = android.view.WindowManager.LayoutParams.FLAG_SECURE
+        useFakes(pin = "1234")
+        val locked = launch()
+        assertEquals(secure, locked.get().window.attributes.flags and secure)
+        app.model.unlock()
+        idle()
+        locked.pause()
+        idle()
+        assertEquals(true, app.model.state.value.isLocked)
+    }
+
+    @Test
+    fun `without a PIN the window is not marked secure`() {
+        useFakes()
+        val activity = launch()
+        assertEquals(0, activity.get().window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
 }

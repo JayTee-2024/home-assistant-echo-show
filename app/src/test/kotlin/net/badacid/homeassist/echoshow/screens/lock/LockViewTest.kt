@@ -22,7 +22,9 @@ class LockViewTest {
     private var unlocked = 0
     private var signedOut = 0
 
-    private fun lock() = LockView(context, "1234", { now }, { unlocked++ }, { signedOut++ }).apply {
+    private val noted = mutableListOf<Pair<Int, Long>>()
+
+    private fun lock(tries: Int = 0, waitUntil: Long = 0) = LockView(context, "1234", { now }, tries, waitUntil, { t, w -> noted += t to w }, { unlocked++ }, { signedOut++ }).apply {
         measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
         layout(0, 0, 1280, 800)
     }
@@ -48,6 +50,17 @@ class LockViewTest {
         now += 30_000
         view.type("1234")
         assertEquals(1, unlocked)
+    }
+
+    @Test
+    fun `it starts from the tries already made, and reports each wrong try`() {
+        val view = lock(tries = 5, waitUntil = now + 20_000)
+        assertTrue(visibleTexts(view).contains("Too many wrong tries. Wait 20 seconds."))
+        view.type("1234")
+        assertEquals(0, unlocked)
+        now += 20_000
+        view.type("0000")
+        assertEquals(listOf(6 to now + 60_000), noted)
     }
 
     @Test

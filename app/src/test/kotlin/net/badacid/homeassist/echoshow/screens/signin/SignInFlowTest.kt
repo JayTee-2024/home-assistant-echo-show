@@ -86,6 +86,18 @@ class SignInFlowTest {
         assertEquals(1, looked)
         assertEquals("http://192.168.1.50:8123/auth/login_flow", answers.requests.single().url)
         assertEquals(SignInForm.CREDENTIALS, flow.state.value.form)
+        assertTrue(flow.state.value.foundOnNetwork)
+    }
+
+    @Test
+    fun `an address the person typed or saved is not marked as found on the network`() = runTest {
+        val saved = flow(Answers(form), startAddress = "http://192.168.1.100:8123")
+        assertFalse(saved.state.value.foundOnNetwork)
+        val found = flow(Answers(form, form), find = { "http://192.168.1.50:8123" })
+        found.change()
+        found.connect("192.168.1.100:8123")
+        runCurrent()
+        assertFalse(found.state.value.foundOnNetwork)
     }
 
     @Test

@@ -156,6 +156,9 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        // The PIN lock locks as soon as the app stops being in front, before Android pictures it for the
+        // recent-apps list.
+        model.lock()
         blankTimer.removeCallbacks(checkBlank)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         applyBlank(false) // Never leave another app's screen black.
@@ -167,9 +170,14 @@ class MainActivity : Activity() {
     /** The PIN lock, over everything, while the app is locked with a PIN and a sign-in. */
     private fun renderLock(state: AppState) {
         val pin = state.saved.pin
+        // With a PIN, the screen's contents stay out of the recent-apps picture and screenshots.
+        if (pin != null) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         val locked = state.isLocked && pin != null && state.saved.signIn != null
         if (locked && lockView == null) {
-            lockView = LockView(this, pin!!, System::currentTimeMillis, { model.unlock() }, { model.signOut() }).also {
+            lockView = LockView(
+                this, pin!!, System::currentTimeMillis, state.saved.pinWrongTries, state.saved.pinWaitUntil,
+                { tries, waitUntil -> model.notePinTries(tries, waitUntil) }, { model.unlock() }, { model.signOut() },
+            ).also {
                 root.addView(it, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             }
         } else if (!locked && lockView != null) {
@@ -311,8 +319,6 @@ class MainActivity : Activity() {
     /** Leaving the screen (Home, another app, the screen sleeping) stops live video, as on the TV. */
     override fun onStop() {
         (overlayView as? CameraView)?.stopLive()
-        // The PIN lock locks whenever the app leaves the screen, including when the screen sleeps.
-        model.lock()
         super.onStop()
     }
 

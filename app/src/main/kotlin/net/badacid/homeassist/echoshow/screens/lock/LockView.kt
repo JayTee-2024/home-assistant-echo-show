@@ -7,7 +7,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import net.badacid.homeassist.echoshow.core.EMPTY_PIN_ENTRY
+import net.badacid.homeassist.echoshow.core.settleWait
 import net.badacid.homeassist.echoshow.core.PinEntry
 import net.badacid.homeassist.echoshow.core.PinResult
 import net.badacid.homeassist.echoshow.core.deleteDigit
@@ -31,11 +31,15 @@ class LockView(
     context: Context,
     private val pin: String,
     private val clock: () -> Long,
+    /** The wrong tries already made, and when the wait after them ends: they outlast the app being restarted. */
+    wrongTries: Int,
+    waitUntil: Long,
+    private val onTries: (wrongTries: Int, waitUntil: Long) -> Unit,
     private val onUnlock: () -> Unit,
     private val onSignOut: () -> Unit,
 ) : FrameLayout(context) {
     private val dp = { v: Float -> Theme.dp(context, v) }
-    private var entry: PinEntry = EMPTY_PIN_ENTRY
+    private var entry: PinEntry = settleWait(PinEntry("", wrongTries, waitUntil), clock())
     private var wasWrong = false
     private val pad = PinPadView(context, ::digit) {
         entry = deleteDigit(entry)
@@ -75,12 +79,18 @@ class LockView(
         contentDescription = "Enter PIN"
         addView(lockBox, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         addView(forgotBox, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        if (entry.waitUntil != waitUntil) onTries(entry.wrongTries, entry.waitUntil)
         draw()
+        if (secondsToWait(entry, clock()) > 0) tick.postDelayed(countDown, 1_000)
     }
 
     private fun digit(digit: String) {
         val step = typeDigit(entry, digit, pin, clock())
+        val before = entry
         entry = step.entry
+        if (step.result != PinResult.UNLOCKED && (entry.wrongTries != before.wrongTries || entry.waitUntil != before.waitUntil)) {
+            onTries(entry.wrongTries, entry.waitUntil)
+        }
         when (step.result) {
             PinResult.UNLOCKED -> onUnlock()
             PinResult.WRONG -> wasWrong = true
