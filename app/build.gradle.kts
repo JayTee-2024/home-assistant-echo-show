@@ -28,6 +28,7 @@ android {
     sourceSets["test"].resources.srcDir("../fixtures")
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { it.useJUnitPlatform() }
     }
 }
@@ -47,6 +48,10 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.mockwebserver)
+    // Views on the JVM, and screenshots of them (Robolectric runs through JUnit 4 on the vintage engine).
+    testImplementation(libs.robolectric)
+    testImplementation(libs.junit4)
+    testRuntimeOnly(libs.junit.vintage)
     testRuntimeOnly(libs.junit.launcher)
 
     // On-device tests only (the keystore); the app itself uses no AndroidX library.
