@@ -52,4 +52,6 @@ data class AppState(
     /** A short message at the bottom of the screen. */
     val toast: String? = null,
     val userName: String = "",
+    /** The PIN lock screen is up. Only ever true while a PIN is saved. */
+    val isLocked: Boolean = false,
 )

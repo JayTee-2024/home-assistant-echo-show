@@ -41,6 +41,7 @@ import net.badacid.homeassist.echoshow.screens.settings.SettingsCallbacks
 import net.badacid.homeassist.echoshow.screens.settings.SettingsScreenState
 import net.badacid.homeassist.echoshow.screens.settings.SettingsView
 import net.badacid.homeassist.echoshow.screens.reorganise.ReorganiseView
+import net.badacid.homeassist.echoshow.screens.lock.LockView
 import net.badacid.homeassist.echoshow.screens.signin.SignInFlow
 import net.badacid.homeassist.echoshow.screens.signin.SignInView
 
@@ -79,6 +80,23 @@ class MainActivity : Activity() {
     private fun render(state: AppState) {
         renderPhase(state)
         renderOverlay(state)
+        renderLock(state)
+    }
+
+    private var lockView: LockView? = null
+
+    /** The PIN lock, over everything, while the app is locked with a PIN and a sign-in. */
+    private fun renderLock(state: AppState) {
+        val pin = state.saved.pin
+        val locked = state.isLocked && pin != null && state.saved.signIn != null
+        if (locked && lockView == null) {
+            lockView = LockView(this, pin!!, System::currentTimeMillis, { model.unlock() }, { model.signOut() }).also {
+                root.addView(it, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            }
+        } else if (!locked && lockView != null) {
+            root.removeView(lockView)
+            lockView = null
+        }
     }
 
     private fun renderPhase(state: AppState) {
@@ -212,6 +230,8 @@ class MainActivity : Activity() {
     /** Leaving the screen (Home, another app, the screen sleeping) stops live video, as on the TV. */
     override fun onStop() {
         (overlayView as? CameraView)?.stopLive()
+        // The PIN lock locks whenever the app leaves the screen, including when the screen sleeps.
+        model.lock()
         super.onStop()
     }
 
@@ -222,6 +242,7 @@ class MainActivity : Activity() {
         userName = state.userName,
         isToken = state.saved.signIn?.kind == SignInKind.LONG_LIVED_TOKEN,
         version = BuildConfig.VERSION_NAME,
+        pin = state.saved.pin,
     )
 
     private val homeCallbacks = object : HomeCallbacks {
@@ -234,6 +255,7 @@ class MainActivity : Activity() {
     private val settingsCallbacks = object : SettingsCallbacks {
         override fun onClose() = model.closeOverlay()
         override fun onReorganise() = model.openReorganise()
+        override fun onSetPin(pin: String?) = model.setPin(pin)
         override fun onToggleDevice(device: Device) = model.toggleDevice(device)
         override fun onSignOut() = model.signOut()
         override fun onOpenLink(address: String) {
@@ -252,6 +274,8 @@ class MainActivity : Activity() {
     /** System Back closes what is open; on the sign-in screen it steps back a form. This app is the Home app, so it never leaves. */
     @Deprecated("Android 11 has no OnBackInvokedCallback")
     override fun onBackPressed() {
+        // Back cannot get past the lock.
+        if (lockView != null) return
         when (model.state.value.phase) {
             Phase.SIGNED_OUT -> signInFlow?.back()
             // Back in the reorganise mode keeps the result, as Done does.

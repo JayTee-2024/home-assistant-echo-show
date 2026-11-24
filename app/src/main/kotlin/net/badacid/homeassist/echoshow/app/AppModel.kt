@@ -91,6 +91,8 @@ class AppModel(
     fun start() {
         if (started) return
         started = true
+        // The app starts locked when a PIN is set, as the LG app does.
+        if (saved.pin != null) publish { it.copy(isLocked = true) }
         val signIn = saved.signIn
         if (signIn == null) publish { it.copy(phase = Phase.SIGNED_OUT) } else connect(signIn)
     }
@@ -137,6 +139,20 @@ class AppModel(
     fun currentConnection(): HomeConnection? = connection
 
     fun openSettings() = publish { it.copy(overlay = Overlay.Settings) }
+
+    // ---- The PIN lock ----
+
+    /** Settings' PIN section: a new PIN, or null to turn the lock off. */
+    fun setPin(pin: String?) = updateSaved { it.copy(pin = pin) }
+
+    /** Locks the app (it left the screen), closing whatever was open. Does nothing without a PIN. */
+    fun lock() {
+        if (saved.pin == null) return
+        publish { it.copy(isLocked = true, overlay = Overlay.None) }
+    }
+
+    /** The lock screen took the right PIN. */
+    fun unlock() = publish { it.copy(isLocked = false) }
 
     /** Settings' "Reorganise layout". */
     fun openReorganise() = publish { it.copy(overlay = Overlay.Reorganise) }
@@ -304,6 +320,7 @@ class AppModel(
                 page = 0,
                 notice = reason,
                 refusedToken = refusedToken,
+                isLocked = false,
                 status = ConnectionStatus.CONNECTED,
             )
         }

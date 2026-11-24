@@ -92,10 +92,10 @@ class AppModelTest {
         clock = { testScheduler.currentTime },
     )
 
-    private fun savedWith(vararg devices: Pair<String, CardSize>, signIn: SavedSignIn? = account): MemoryStorage {
+    private fun savedWith(vararg devices: Pair<String, CardSize>, signIn: SavedSignIn? = account, pin: String? = null): MemoryStorage {
         var layout = net.badacid.homeassist.echoshow.core.EMPTY_LAYOUT
         for ((id, size) in devices) layout = addCard(layout, id, size)
-        return MemoryStorage(serialiseSavedState(EMPTY_SAVED_STATE.copy(signIn = signIn, layout = layout, layoutAddress = signIn?.address)))
+        return MemoryStorage(serialiseSavedState(EMPTY_SAVED_STATE.copy(signIn = signIn, layout = layout, layoutAddress = signIn?.address, pin = pin)))
     }
 
     private fun TestScope.connectedModel(vararg devices: Pair<String, CardSize>): Pair<AppModel, FakeConnection> {
@@ -269,6 +269,48 @@ class AppModelTest {
         model.saveLayout(moved)
         assertEquals(Overlay.None, model.state.value.overlay)
         assertEquals(moved, model.state.value.saved.layout)
+    }
+
+    @Test
+    fun `a saved PIN starts the app locked, and without one it never locks`() = runTest {
+        attempts += { FakeConnection() }
+        val locked = model(savedWith(pin = "1234"))
+        locked.start()
+        runCurrent()
+        assertTrue(locked.state.value.isLocked)
+        attempts += { FakeConnection() }
+        val open = model(savedWith())
+        open.start()
+        runCurrent()
+        open.lock()
+        assertFalse(open.state.value.isLocked)
+    }
+
+    @Test
+    fun `lock closes Settings and unlocking shows the plain home screen`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.setPin("1234")
+        model.openSettings()
+        model.lock()
+        assertTrue(model.state.value.isLocked)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        model.unlock()
+        assertFalse(model.state.value.isLocked)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        assertEquals("1234", model.state.value.saved.pin)
+    }
+
+    @Test
+    fun `signing out from the lock screen removes the PIN and the lock`() = runTest {
+        val (model, _) = connectedModel()
+        model.setPin("1234")
+        model.lock()
+        model.signOut()
+        advanceTimeBy(6_000)
+        runCurrent()
+        assertNull(model.state.value.saved.pin)
+        assertFalse(model.state.value.isLocked)
+        assertEquals(Phase.SIGNED_OUT, model.state.value.phase)
     }
 
     @Test

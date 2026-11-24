@@ -53,7 +53,7 @@ class MainActivityTest {
         override fun close() = Unit
     }
 
-    private fun saved(signedIn: Boolean) = Memory(
+    private fun saved(signedIn: Boolean, pin: String? = null) = Memory(
         serialiseSavedState(
             EMPTY_SAVED_STATE.copy(
                 signIn = if (signedIn) signIn else null,
@@ -62,12 +62,13 @@ class MainActivityTest {
                     CardPlace("device:dev_tado", 1, 0, 0, CardSize.WIDE),
                 )),
                 layoutAddress = signIn.address,
+                pin = pin,
             ),
         ),
     )
 
-    private fun useFakes(signedIn: Boolean = true) {
-        app.storageForTests = saved(signedIn)
+    private fun useFakes(signedIn: Boolean = true, pin: String? = null) {
+        app.storageForTests = saved(signedIn, pin)
         app.openerForTests = { _, _ -> opens++; FakeConnection() }
     }
 
@@ -154,5 +155,20 @@ class MainActivityTest {
         idle()
         assertEquals(true, stopped)
         assertEquals(0, activity.get().window.attributes.flags and keepOn)
+    }
+
+    @Test
+    fun `with a PIN the app opens locked, and leaving the screen locks it again`() {
+        useFakes(pin = "1234")
+        val activity = launch()
+        assertNotNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+        app.model.unlock()
+        idle()
+        assertNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+        activity.pause().stop()
+        idle()
+        activity.start().resume()
+        idle()
+        assertNotNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
     }
 }

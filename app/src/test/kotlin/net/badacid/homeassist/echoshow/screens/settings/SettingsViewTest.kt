@@ -37,6 +37,7 @@ class SettingsViewTest {
         override fun onToggleDevice(device: Device) { calls += "toggle ${device.id}" }
         override fun onSignOut() { calls += "sign out" }
         override fun onOpenLink(address: String) { calls += "open $address" }
+        override fun onSetPin(pin: String?) { calls += "pin $pin" }
     }
 
     private fun state(isToken: Boolean = false) = SettingsScreenState(
@@ -46,6 +47,7 @@ class SettingsViewTest {
         userName = "Simon",
         isToken = isToken,
         version = "0.3.0",
+        pin = null,
     )
 
     private fun settings(state: SettingsScreenState = state()) = SettingsView(context, callbacks).apply {
@@ -83,6 +85,30 @@ class SettingsViewTest {
     fun `Reorganise layout leaves Settings for the reorganise mode`() {
         settings().withText("Reorganise layout").performClick()
         assertEquals(listOf("reorganise"), calls)
+    }
+
+    @Test
+    fun `turning the lock on needs the same PIN twice`() {
+        val view = settings()
+        view.withText("PIN lock").performClick()
+        laidOut(view)
+        view.withText("Turn on PIN lock").performClick()
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertTrue(visibleTexts(view).contains("Type the PIN again"))
+        "1235".forEach { view.withText(it.toString()).performClick() }
+        assertTrue(visibleTexts(view).contains("The two PINs did not match. Start again."))
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertEquals(listOf("pin 1234"), calls)
+    }
+
+    @Test
+    fun `turning the lock off asks for the current PIN`() {
+        val view = settings(state().copy(pin = "1234"))
+        view.withText("PIN lock").performClick()
+        view.withText("Turn off PIN lock").performClick()
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertEquals(listOf("pin null"), calls)
     }
 
     @Test
@@ -137,5 +163,7 @@ class SettingsViewTest {
         snapshot(view, "settings-connection")
         view.withText("About").performClick()
         snapshot(view, "settings-about")
+        view.withText("PIN lock").performClick()
+        snapshot(view, "settings-pin")
     }
 }
