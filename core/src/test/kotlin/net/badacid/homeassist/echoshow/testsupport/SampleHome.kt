@@ -3,12 +3,11 @@ package net.badacid.homeassist.echoshow.testsupport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import net.badacid.homeassist.echoshow.core.EntityState
 import net.badacid.homeassist.echoshow.core.HomeSnapshot
+import net.badacid.homeassist.echoshow.core.jsonValue
 import net.badacid.homeassist.echoshow.core.readEntityState
 import net.badacid.homeassist.echoshow.core.readRegistryAreas
 import net.badacid.homeassist.echoshow.core.readRegistryDevices
@@ -47,17 +46,8 @@ fun changed(entity: EntityState, attributes: Map<String, Any?>, state: String = 
         attributes = JsonObject(entity.attributes + attributes.mapValues { toJson(it.value) }),
     )
 
-/** Kotlin values as JSON, for building test data: text, numbers, booleans, null, lists and maps. */
-fun toJson(value: Any?): JsonElement = when (value) {
-    null -> JsonNull
-    is JsonElement -> value
-    is String -> JsonPrimitive(value)
-    is Number -> JsonPrimitive(value)
-    is Boolean -> JsonPrimitive(value)
-    is List<*> -> JsonArray(value.map { toJson(it) })
-    is Map<*, *> -> JsonObject(value.entries.associate { it.key as String to toJson(it.value) })
-    else -> error("Cannot turn ${value::class} into JSON")
-}
+/** Kotlin values as JSON, for building test data (see jsonValue). */
+fun toJson(value: Any?): JsonElement = jsonValue(value)
 
 /** A JSON value from text, for registry and attribute tests that read best as JSON. */
 fun json(text: String): JsonElement = Json.parseToJsonElement(text)
