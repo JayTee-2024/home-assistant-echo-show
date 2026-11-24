@@ -132,6 +132,9 @@ class AppModel(
         publish { it.copy(overlay = Overlay.Panel(deviceId)) }
     }
 
+    /** The open connection, for live video, or null while there is none. */
+    fun currentConnection(): HomeConnection? = connection
+
     fun openSettings() = publish { it.copy(overlay = Overlay.Settings) }
 
     fun closeOverlay() = publish { it.copy(overlay = Overlay.None) }

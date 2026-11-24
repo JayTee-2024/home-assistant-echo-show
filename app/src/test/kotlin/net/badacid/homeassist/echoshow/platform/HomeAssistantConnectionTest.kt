@@ -11,6 +11,10 @@ import net.badacid.homeassist.echoshow.core.ConnectionStatus
 import net.badacid.homeassist.echoshow.core.OpenFailed
 import net.badacid.homeassist.echoshow.core.OpenFailure
 import net.badacid.homeassist.echoshow.core.ServiceCall
+import net.badacid.homeassist.echoshow.core.IceServerConfig
+import net.badacid.homeassist.echoshow.core.WebRtcMessage
+import net.badacid.homeassist.echoshow.core.textOrNull
+import org.junit.jupiter.api.Assertions.assertFalse
 import net.badacid.homeassist.echoshow.core.jsonObjectOf
 import net.badacid.homeassist.echoshow.testsupport.FakeHomeAssistant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -221,5 +225,27 @@ class HomeAssistantConnectionTest : ConnectionTesting() {
     fun `the connection sends keep-alive pings, so a dead link is noticed`() = runBlocking {
         val connection = open()
         assertTrue(pingIntervalOf(connection) in 1..30_000, "ping interval ${pingIntervalOf(connection)}")
+    }
+
+
+    @Test
+    fun `asks whether a camera can stream, and gives its ICE servers`() = runBlocking {
+        fake.home.webRtcCameras += "camera.front_door"
+        val connection = open()
+        assertTrue(connection.cameraCanStream("camera.front_door"))
+        assertFalse(connection.cameraCanStream("camera.other"))
+        assertEquals(listOf(IceServerConfig(listOf("stun:stun.example:3478"), null, null)), connection.webRtcIceServers("camera.front_door"))
+    }
+
+    @Test
+    fun `an offer gets the session and the answer, and closing it unsubscribes`() {
+        fake.home.webRtcCameras += "camera.front_door"
+        val connection = runBlocking { open() }
+        val messages = java.util.concurrent.CopyOnWriteArrayList<WebRtcMessage>()
+        val offer = connection.webRtcOffer("camera.front_door", "v=0 offer") { messages += it }!!
+        waitUntil("the answer") { messages.size == 2 }
+        assertEquals(listOf(WebRtcMessage.Session("session-1"), WebRtcMessage.Answer("v=0 fake answer")), messages.toList())
+        assertEquals("v=0 offer", textOrNull(fake.home.offers.single()["offer"]))
+        offer.close()
     }
 }

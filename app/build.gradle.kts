@@ -14,6 +14,9 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The Echo Show 8 (1st gen) runs 32-bit ARM only; the WebRTC library's other native builds would
+        // make the APK four times the size.
+        ndk { abiFilters += listOf("armeabi-v7a") }
     }
 
     buildFeatures {
@@ -43,6 +46,7 @@ dependencies {
     implementation(project(":core"))
     implementation(libs.okhttp)
     implementation(libs.coroutines.android)
+    implementation(libs.webrtc)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

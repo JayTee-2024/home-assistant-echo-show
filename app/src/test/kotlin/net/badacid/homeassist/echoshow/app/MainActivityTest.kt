@@ -124,4 +124,35 @@ class MainActivityTest {
         assertFalse(activity.get().isFinishing)
         assertNotNull(activity.find<HomeView>())
     }
+
+    @Test
+    fun `the activity stopping stops live video and lets the screen sleep again`() {
+        useFakes()
+        var stopped = false
+        val sessionState = MutableStateFlow(net.badacid.homeassist.echoshow.core.LiveState.CONNECTING)
+        app.liveForTests = object : net.badacid.homeassist.echoshow.screens.camera.LiveVideoAccess {
+            override suspend fun canStream(entityId: String) = true
+            override fun start(entityId: String) = object : net.badacid.homeassist.echoshow.screens.camera.LiveSession {
+                override val state = sessionState
+                override val videoView = View(app)
+                override fun setMuted(muted: Boolean) = Unit
+                override fun stop() { stopped = true }
+            }
+        }
+        val activity = launch()
+        app.model.holdCard("device:dev_ring")
+        idle()
+        val camera = activity.find<net.badacid.homeassist.echoshow.screens.camera.CameraView>()!!
+        val keepOn = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        assertEquals(0, activity.get().window.attributes.flags and keepOn)
+        val found = ArrayList<View>()
+        camera.findViewsWithText(found, "Watch live", View.FIND_VIEWS_WITH_TEXT)
+        found.first().performClick()
+        idle()
+        assertEquals(keepOn, activity.get().window.attributes.flags and keepOn)
+        activity.pause().stop()
+        idle()
+        assertEquals(true, stopped)
+        assertEquals(0, activity.get().window.attributes.flags and keepOn)
+    }
 }

@@ -45,6 +45,11 @@ import net.badacid.homeassist.echoshow.core.SavedSignIn
 import net.badacid.homeassist.echoshow.core.ServiceCall
 import net.badacid.homeassist.echoshow.core.applyEntityUpdate
 import net.badacid.homeassist.echoshow.core.jsonObjectOf
+import net.badacid.homeassist.echoshow.core.readWebRtcEvent
+import net.badacid.homeassist.echoshow.core.readIceServers
+import net.badacid.homeassist.echoshow.core.canStreamWebRtc
+import net.badacid.homeassist.echoshow.core.WebRtcMessage
+import net.badacid.homeassist.echoshow.core.IceServerConfig
 import net.badacid.homeassist.echoshow.core.needsRefresh
 import net.badacid.homeassist.echoshow.core.readRegistryAreas
 import net.badacid.homeassist.echoshow.core.readRegistryDevices
@@ -163,6 +168,33 @@ private class HomeAssistantConnection(
         } catch (refused: SessionError) {
             throw CommandRefused(refused.message?.takeIf { it.isNotEmpty() } ?: COMMAND_REFUSED)
         }
+    }
+
+    // ---- Live camera video ----
+
+    private fun connectedSession(): Session? = synchronized(lock) { session.takeIf { statusFlow.value == ConnectionStatus.CONNECTED } }
+
+    private suspend fun ask(message: JsonObject): JsonObject? {
+        val current = connectedSession() ?: return null
+        return try {
+            kotlinx.coroutines.withTimeoutOrNull(commandTimeoutMs) { current.request(message) as? JsonObject }
+        } catch (_: SessionError) {
+            null
+        }
+    }
+
+    override suspend fun cameraCanStream(entityId: String): Boolean =
+        canStreamWebRtc(ask(jsonObjectOf("type" to "camera/capabilities", "entity_id" to entityId)))
+
+    override suspend fun webRtcIceServers(entityId: String): List<IceServerConfig> =
+        readIceServers(ask(jsonObjectOf("type" to "camera/webrtc/get_client_config", "entity_id" to entityId)))
+
+    override fun webRtcOffer(entityId: String, offerSdp: String, onMessage: (WebRtcMessage) -> Unit): java.io.Closeable? {
+        val current = connectedSession() ?: return null
+        val id = current.sendOnly(jsonObjectOf("type" to "camera/webrtc/offer", "entity_id" to entityId, "offer" to offerSdp)) { event ->
+            readWebRtcEvent(event)?.let(onMessage)
+        } ?: return null
+        return java.io.Closeable { current.unsubscribe(id) }
     }
 
     override suspend fun signOut() {
@@ -404,16 +436,24 @@ private class HomeAssistantConnection(
             return result.await()
         }
 
-        /** Sends a request whose result does not matter. `onEvent` gets the events of a subscription. */
-        fun sendOnly(message: JsonObject, onEvent: ((JsonObject) -> Unit)? = null) {
+        /**
+         * Sends a request whose result does not matter. `onEvent` gets the events of a subscription. Returns the
+         * message's id, or null when the socket has closed.
+         */
+        fun sendOnly(message: JsonObject, onEvent: ((JsonObject) -> Unit)? = null): Int? =
             send(message, CompletableDeferred(), onEvent)
+
+        /** Stops the events of a subscription made with sendOnly. */
+        fun unsubscribe(id: Int) {
+            val wasSubscribed = synchronized(lock) { subscriptions.remove(id) != null }
+            if (wasSubscribed) sendOnly(jsonObjectOf("type" to "unsubscribe_events", "subscription" to id))
         }
 
-        private fun send(message: JsonObject, result: CompletableDeferred<JsonElement?>, onEvent: ((JsonObject) -> Unit)?) {
+        private fun send(message: JsonObject, result: CompletableDeferred<JsonElement?>, onEvent: ((JsonObject) -> Unit)?): Int? {
             synchronized(lock) {
                 if (!isOpen) {
                     result.completeExceptionally(SessionError(""))
-                    return
+                    return null
                 }
                 val id = nextId++
                 pending[id] = result
@@ -421,6 +461,7 @@ private class HomeAssistantConnection(
                 // Sent under the lock, so ids reach Home Assistant in the order they were given out: it refuses
                 // an id that is not higher than the last. OkHttp's send only queues, so this does not block.
                 socket.send(JsonObject(message + ("id" to JsonPrimitive(id))).toString())
+                return id
             }
         }
 

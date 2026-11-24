@@ -6,6 +6,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
+import net.badacid.homeassist.echoshow.devices.PanelLayout
+import net.badacid.homeassist.echoshow.devices.deviceLogicFor
+import net.badacid.homeassist.echoshow.platform.LiveVideoSession
+import net.badacid.homeassist.echoshow.screens.camera.CameraView
+import net.badacid.homeassist.echoshow.screens.camera.LiveSession
+import net.badacid.homeassist.echoshow.screens.camera.LiveVideoAccess
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
@@ -143,7 +150,11 @@ class MainActivity : Activity() {
                 Overlay.None -> null
                 Overlay.Settings -> SettingsView(this, settingsCallbacks).also { settingsView = it }
                 is Overlay.Panel -> findDevice(state.devices, overlay.deviceId)?.let { device ->
-                    PanelView(this, { model.closeOverlay() }, { model.run(it) }).apply { show(device, state.shownHome) }
+                    if (isFullScreen(device)) {
+                        cameraView(state).apply { show(device, state.shownHome) }
+                    } else {
+                        PanelView(this, { model.closeOverlay() }, { model.run(it) }).apply { show(device, state.shownHome) }
+                    }
                 }
             }
             view?.let {
@@ -153,9 +164,52 @@ class MainActivity : Activity() {
         }
         when (overlay) {
             Overlay.Settings -> settingsView?.show(settingsScreenState(state))
-            is Overlay.Panel -> findDevice(state.devices, overlay.deviceId)?.let { (overlayView as? PanelView)?.show(it, state.shownHome) }
+            is Overlay.Panel -> findDevice(state.devices, overlay.deviceId)?.let { device ->
+                (overlayView as? PanelView)?.show(device, state.shownHome)
+                (overlayView as? CameraView)?.show(device, state.shownHome)
+            }
             Overlay.None -> Unit
         }
+    }
+
+    private fun isFullScreen(device: Device) =
+        device.mainPart?.let { deviceLogicFor(it.typeId) }?.panelLayout == PanelLayout.FULL_SCREEN
+
+    private fun cameraView(state: AppState) = CameraView(
+        this,
+        scope,
+        app.liveForTests ?: liveVideo,
+        pictures,
+        state.saved.signIn?.address.orEmpty(),
+        app.pictureUpdates,
+        System::currentTimeMillis,
+        onClose = { model.closeOverlay() },
+        onLiveRunning = { running ->
+            // The screen stays on only while live video plays (or is starting).
+            if (running) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        },
+    )
+
+    /** Live video through the open connection; a camera cannot stream while there is none. */
+    private val liveVideo = object : LiveVideoAccess {
+        override suspend fun canStream(entityId: String) = model.currentConnection()?.cameraCanStream(entityId) == true
+
+        override fun start(entityId: String): LiveSession {
+            val connection = model.currentConnection()
+            val session = connection?.let { LiveVideoSession(this@MainActivity, it, entityId, scope) }
+            return object : LiveSession {
+                override val state = session?.state ?: kotlinx.coroutines.flow.MutableStateFlow(net.badacid.homeassist.echoshow.core.LiveState.FAILED)
+                override val videoView: View = session?.videoView ?: View(this@MainActivity)
+                override fun setMuted(muted: Boolean) { session?.setMuted(muted) }
+                override fun stop() { session?.stop() }
+            }.also { session?.start() }
+        }
+    }
+
+    /** Leaving the screen (Home, another app, the screen sleeping) stops live video, as on the TV. */
+    override fun onStop() {
+        (overlayView as? CameraView)?.stopLive()
+        super.onStop()
     }
 
     private fun settingsScreenState(state: AppState) = SettingsScreenState(
