@@ -44,7 +44,7 @@ class SavedStateTest {
         @Test
         fun `writes only the documented fields, in the LG app's names`() {
             val saved = Json.parseToJsonElement(serialiseSavedState(state)).jsonObject
-            assertEquals(listOf("layout", "layoutAddress", "pin", "signIn", "version"), saved.keys.sorted())
+            assertEquals(listOf("blankAfterSeconds", "layout", "layoutAddress", "pin", "signIn", "version"), saved.keys.sorted())
             assertEquals(JsonPrimitive(1), saved["version"])
             assertEquals(
                 listOf("accessToken", "address", "expiresAt", "kind", "refreshToken"),
@@ -237,5 +237,14 @@ class SavedStateTest {
             assertNull(afterSignOut(signedIn).pin)
             assertEquals("0412", afterSignIn(signedIn.copy(signIn = null), signedIn.signIn!!).pin)
         }
+    }
+
+    @Test
+    fun `keeps the screen blanking time, and data from before it existed gets 30 seconds`() {
+        val state = EMPTY_SAVED_STATE.copy(blankAfterSeconds = 120)
+        assertEquals(120, parseSavedState(serialiseSavedState(state)).blankAfterSeconds)
+        assertEquals(0, parseSavedState(serialiseSavedState(state.copy(blankAfterSeconds = 0))).blankAfterSeconds)
+        val old = """{"version":1,"signIn":null,"layout":{"cards":[]},"layoutAddress":null,"pin":null}"""
+        assertEquals(30, parseSavedState(old).blankAfterSeconds)
     }
 }

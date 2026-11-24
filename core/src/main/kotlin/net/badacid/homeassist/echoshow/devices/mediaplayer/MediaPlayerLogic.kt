@@ -30,4 +30,6 @@ object MediaPlayerLogic : DeviceLogic {
         val state = readableName(view.state)
         return if (view.title == null) state else "$state · ${view.title}"
     }
+
+    override fun panel(entity: EntityState) = mediaPlayerPanel(entity)
 }

@@ -21,4 +21,6 @@ object BinarySensorLogic : DeviceLogic {
     override fun isActive(entity: EntityState) = readBinarySensor(entity).isOn
 
     override fun summary(entity: EntityState) = readBinarySensor(entity).words
+
+    override fun panel(entity: EntityState) = binarySensorPanel(entity)
 }

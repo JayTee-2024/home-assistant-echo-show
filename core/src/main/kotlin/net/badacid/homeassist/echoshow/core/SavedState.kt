@@ -27,6 +27,8 @@ data class SavedState(
     val layoutAddress: String?,
     /** The PIN lock's four digits, or null when the lock is off (see PinLock.kt). */
     val pin: String?,
+    /** Seconds without a touch before the screen blanks; 0 never (see ScreenSaver.kt). */
+    val blankAfterSeconds: Int = DEFAULT_BLANK_AFTER_SECONDS,
 )
 
 val EMPTY_SAVED_STATE = SavedState(signIn = null, layout = EMPTY_LAYOUT, layoutAddress = null, pin = null)
@@ -70,6 +72,7 @@ fun serialiseSavedState(state: SavedState): String {
         )
         put("layoutAddress", state.layoutAddress)
         put("pin", state.pin)
+        put("blankAfterSeconds", state.blankAfterSeconds)
     }.toString()
 }
 
@@ -91,6 +94,8 @@ fun parseSavedState(text: String?): SavedState {
         layoutAddress = textOrNull(saved["layoutAddress"]),
         // Absent in data saved before the PIN lock existed: the lock is then off.
         pin = if (pin != null && isValidPin(pin)) pin else null,
+        // Absent in data saved before screen blanking existed: the original Echo app's 30 seconds.
+        blankAfterSeconds = wholeNumberOrNull(saved["blankAfterSeconds"])?.toInt()?.takeIf { it >= 0 } ?: DEFAULT_BLANK_AFTER_SECONDS,
     )
 }
 
@@ -100,7 +105,7 @@ fun parseSavedState(text: String?): SavedState {
  */
 fun afterSignIn(state: SavedState, signIn: SavedSignIn): SavedState {
     val sameHome = state.layoutAddress == signIn.address
-    return SavedState(signIn, if (sameHome) state.layout else EMPTY_LAYOUT, signIn.address, state.pin)
+    return state.copy(signIn = signIn, layout = if (sameHome) state.layout else EMPTY_LAYOUT, layoutAddress = signIn.address)
 }
 
 /**
@@ -108,7 +113,7 @@ fun afterSignIn(state: SavedState, signIn: SavedSignIn): SavedState {
  * guards a sign-in, and signing out is the way past a forgotten PIN.
  */
 fun afterSignOut(state: SavedState): SavedState =
-    SavedState(signIn = null, layout = state.layout, layoutAddress = state.layoutAddress, pin = null)
+    state.copy(signIn = null, pin = null)
 
 private fun readSignIn(value: JsonElement?): SavedSignIn? {
     val item = value as? JsonObject ?: return null

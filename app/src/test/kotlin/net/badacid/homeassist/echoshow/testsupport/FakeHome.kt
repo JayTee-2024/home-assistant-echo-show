@@ -120,6 +120,12 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
         silentCommands += type
     }
 
+    /** Cameras that offer live video by WebRTC. */
+    val webRtcCameras: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+
+    /** Every camera/webrtc/offer message received. */
+    val offers: MutableList<JsonObject> = java.util.concurrent.CopyOnWriteArrayList()
+
     /** Ends every open WebSocket session. */
     @Synchronized
     fun closeAllSockets(): List<FakeSocket> = sockets.toList().also { list -> list.forEach { it.close() } }
@@ -264,6 +270,17 @@ class FakeHome(sample: JsonObject, private val cameraPicture: ByteArray) {
                         sendToClient(jsonObjectOf("id" to id, "type" to "event", "event" to mapOf("a" to allStatesCompressed())))
                     }
                     "get_states" -> result(id, JsonArray(states.map { JsonObject(it) }))
+                    "camera/capabilities" -> {
+                        val types = if (textOrNull(message["entity_id"]) in webRtcCameras) listOf("hls", "web_rtc") else listOf("hls")
+                        result(id, mapOf("frontend_stream_types" to types))
+                    }
+                    "camera/webrtc/get_client_config" -> result(id, mapOf("configuration" to mapOf("iceServers" to listOf(mapOf("urls" to "stun:stun.example:3478")))))
+                    "camera/webrtc/offer" -> {
+                        offers += message
+                        result(id, null)
+                        sendToClient(jsonObjectOf("id" to id, "type" to "event", "event" to mapOf("type" to "session", "session_id" to "session-1")))
+                        sendToClient(jsonObjectOf("id" to id, "type" to "event", "event" to mapOf("type" to "answer", "answer" to "v=0 fake answer")))
+                    }
                     "config/entity_registry/list" -> result(id, entities).also { registryListCount++ }
                     "config/device_registry/list" -> result(id, devices).also { registryListCount++ }
                     "config/area_registry/list" -> result(id, areas).also { registryListCount++ }

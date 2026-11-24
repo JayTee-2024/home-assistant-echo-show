@@ -27,4 +27,6 @@ object LightLogic : DeviceLogic {
         if (!view.isOn) return "Off"
         return if (view.brightnessPercent == null) "On" else "On · ${view.brightnessPercent}%"
     }
+
+    override fun panel(entity: EntityState) = lightPanel(entity)
 }

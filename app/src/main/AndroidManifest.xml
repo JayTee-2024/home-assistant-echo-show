@@ -18,6 +18,7 @@
         <activity
             android:name=".app.MainActivity"
             android:exported="true"
+            android:configChanges="uiMode|locale|layoutDirection|fontScale|keyboard|keyboardHidden|navigation|density|screenLayout|screenSize|smallestScreenSize"
             android:launchMode="singleTask"
             android:screenOrientation="landscape">
             <intent-filter>

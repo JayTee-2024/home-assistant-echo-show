@@ -57,4 +57,7 @@ interface DeviceLogic : PartType {
     fun summary(entity: EntityState): String?
 
     val panelLayout: PanelLayout get() = PanelLayout.BOX
+
+    /** The rows of the type's box panel (devices/Panel.kt). */
+    fun panel(entity: EntityState): List<PanelRow> = emptyList()
 }

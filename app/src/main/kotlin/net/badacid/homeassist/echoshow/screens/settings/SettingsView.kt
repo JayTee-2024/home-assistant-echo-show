@@ -29,18 +29,40 @@ data class SettingsScreenState(
     /** Signed in with a long-lived access token, which signing out cannot cancel. */
     val isToken: Boolean,
     val version: String,
+    /** The PIN lock's PIN, or null when the lock is off. */
+    val pin: String?,
+    /** Seconds without a touch before the screen blanks; 0 never. */
+    val blankAfterSeconds: Int,
 )
 
 interface SettingsCallbacks {
     fun onClose()
 
+    /** Leaves Settings for the "Reorganise layout" mode. */
+    fun onReorganise()
+
     /** Adds the device's card, or removes it. For a device with nothing supported, the app says so. */
     fun onToggleDevice(device: Device)
     fun onSignOut()
     fun onOpenLink(address: String)
+
+    /** A new PIN, or null to turn the lock off. */
+    fun onSetPin(pin: String?)
+
+    /** How long the screen waits before blanking, in seconds; 0 never. */
+    fun onSetBlankAfter(seconds: Int)
 }
 
-private enum class Section(val label: String) { DEVICES("Devices"), CONNECTION("Connection"), ABOUT("About") }
+private enum class Section(val label: String) { DEVICES("Devices"), CONNECTION("Connection"), PIN("PIN lock"), SCREEN("Screen"), ABOUT("About") }
+
+/** Where the PIN section is: showing what is set, or asking for a PIN. */
+private sealed interface PinStep {
+    data object Idle : PinStep
+    /** The current PIN, before changing it or turning the lock off. */
+    data class Current(val turnOff: Boolean) : PinStep
+    data object New : PinStep
+    data class Repeat(val first: String) : PinStep
+}
 
 const val GAMES_ADDRESS = "https://gamesunleashed.com"
 private const val SOURCE_ADDRESS = "github.com/JayTee-2024/home-assistant-echo-show"
@@ -70,16 +92,21 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
         val nav = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16f), dp(8f), dp(8f), dp(16f))
+            fun sectionButton(label: String, onPress: () -> Unit) = Theme.text(context, label, Theme.BODY_SP, Theme.TEXT_DIM).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                minHeight = dp(Theme.TOUCH_DP)
+                setPadding(dp(16f), 0, dp(16f), 0)
+                isClickable = true
+                setOnClickListener { onPress() }
+            }
             for (each in Section.entries) {
-                val button = Theme.text(context, each.label, Theme.BODY_SP).apply {
-                    gravity = Gravity.CENTER_VERTICAL
-                    minHeight = dp(Theme.TOUCH_DP)
-                    setPadding(dp(16f), 0, dp(16f), 0)
-                    isClickable = true
-                    setOnClickListener { open(each) }
-                }
+                val button = sectionButton(each.label) { open(each) }
                 sectionButtons[each] = button
                 addView(button, Widgets.matchWidth().apply { bottomMargin = dp(4f) })
+                // As in the LG app, "Reorganise layout" sits under Devices and leaves Settings.
+                if (each == Section.DEVICES) {
+                    addView(sectionButton("Reorganise layout") { callbacks.onReorganise() }, Widgets.matchWidth().apply { bottomMargin = dp(4f) })
+                }
             }
             addView(version, Widgets.matchWidth().apply { topMargin = dp(16f); leftMargin = dp(16f) })
         }
@@ -97,13 +124,16 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
         // Redraw only when what is shown changed: Home Assistant reports often, and a row replaced between a
         // finger going down and coming up would lose the tap. The other sections do not change while open.
         val listChanged = before == null || before.rooms != state.rooms || before.layout != state.layout
-        if (before == null || (section == Section.DEVICES && listChanged)) draw()
+        val pinChanged = before != null && (before.pin != state.pin || before.blankAfterSeconds != state.blankAfterSeconds)
+        if (before == null || (section == Section.DEVICES && listChanged) || (section == Section.PIN && pinChanged && pinStep == PinStep.Idle) || (section == Section.SCREEN && pinChanged)) draw()
     }
 
     private fun open(each: Section) {
         if (each != section) {
             section = each
             isConfirmingSignOut = false
+            pinStep = PinStep.Idle
+            pinMessage = null
             scroll.scrollTo(0, 0)
         }
         draw()
@@ -121,6 +151,8 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
         when (section) {
             Section.DEVICES -> drawDevices(state)
             Section.CONNECTION -> drawConnection(state)
+            Section.PIN -> drawPin(state)
+            Section.SCREEN -> drawScreen(state)
             Section.ABOUT -> drawAbout(state)
         }
     }
@@ -206,6 +238,122 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
             })
         }
         content.addView(buttons, Widgets.matchWidth().apply { topMargin = dp(24f) })
+    }
+
+    // ---- PIN lock (PinSection.tsx) ----
+
+    private var pinStep: PinStep = PinStep.Idle
+    private var pinMessage: String? = null
+    private var typed = ""
+    private var entry = net.badacid.homeassist.echoshow.core.EMPTY_PIN_ENTRY
+
+    private fun goPin(next: PinStep, message: String?) {
+        pinStep = next
+        pinMessage = message
+        typed = ""
+        draw()
+    }
+
+    private fun drawPin(state: SettingsScreenState) {
+        val step = pinStep
+        if (step != PinStep.Idle) {
+            val pad = net.badacid.homeassist.echoshow.screens.shared.PinPadView(context, { digit -> pinDigit(state, digit) }) {
+                if (step is PinStep.Current) entry = net.badacid.homeassist.echoshow.core.deleteDigit(entry) else typed = typed.dropLast(1)
+                draw()
+            }
+            pad.setTitle(when (step) {
+                is PinStep.Current -> "Enter your current PIN"
+                PinStep.New -> "Choose a 4-digit PIN"
+                else -> "Type the PIN again"
+            })
+            pad.setMessage(pinMessage)
+            pad.setTyped(if (step is PinStep.Current) entry.digits.length else typed.length)
+            content.addView(pad, Widgets.wrap().apply { topMargin = dp(12f) })
+            content.addView(Widgets.button(context, "Cancel", Widgets.ButtonStyle.OUTLINE) { goPin(PinStep.Idle, null) }, Widgets.wrap().apply { topMargin = dp(16f) })
+            return
+        }
+        note("With the PIN lock on, this app asks for a 4-digit PIN when it opens and when you come back to it. It keeps guests and children out of your home's controls. Turn it on if any switch, button, script or scene on your home screen controls something sensitive.")
+        note("Choose a PIN you do not use for anything else, such as a bank card: it is kept on this Echo. If you forget it, the lock screen lets you sign out, which removes the PIN.")
+        fact("PIN lock", if (state.pin == null) "Off" else "On")
+        pinMessage?.let { note(it) }
+        val buttons = LinearLayout(context)
+        if (state.pin == null) {
+            buttons.addView(Widgets.button(context, "Turn on PIN lock", Widgets.ButtonStyle.OUTLINE) { goPin(PinStep.New, null) })
+        } else {
+            buttons.addView(Widgets.button(context, "Change PIN", Widgets.ButtonStyle.OUTLINE) { goPin(PinStep.Current(turnOff = false), null) })
+            buttons.addView(Widgets.button(context, "Turn off PIN lock", Widgets.ButtonStyle.OUTLINE) { goPin(PinStep.Current(turnOff = true), null) }, Widgets.wrap().apply { leftMargin = dp(12f) })
+        }
+        content.addView(buttons, Widgets.matchWidth().apply { topMargin = dp(24f) })
+    }
+
+    private fun pinDigit(state: SettingsScreenState, digit: String) {
+        when (val step = pinStep) {
+            is PinStep.Current -> {
+                val pin = state.pin ?: return
+                val now = System.currentTimeMillis()
+                val result = net.badacid.homeassist.echoshow.core.typeDigit(entry, digit, pin, now)
+                entry = result.entry
+                when (result.result) {
+                    net.badacid.homeassist.echoshow.core.PinResult.UNLOCKED -> if (step.turnOff) {
+                        callbacks.onSetPin(null)
+                        this.state = state.copy(pin = null)
+                        goPin(PinStep.Idle, "The PIN lock is off.")
+                    } else {
+                        goPin(PinStep.New, null)
+                    }
+                    net.badacid.homeassist.echoshow.core.PinResult.WRONG, net.badacid.homeassist.echoshow.core.PinResult.WAITING -> {
+                        val wait = net.badacid.homeassist.echoshow.core.secondsToWait(entry, now)
+                        pinMessage = if (wait > 0) "Too many wrong tries. Wait $wait seconds." else "Wrong PIN. Try again."
+                        draw()
+                    }
+                    net.badacid.homeassist.echoshow.core.PinResult.MORE -> {
+                        pinMessage = null
+                        draw()
+                    }
+                }
+            }
+            PinStep.New, is PinStep.Repeat -> {
+                val digits = typed + digit
+                if (digits.length < net.badacid.homeassist.echoshow.core.PIN_LENGTH) {
+                    typed = digits
+                    draw()
+                    return
+                }
+                when {
+                    step == PinStep.New -> goPin(PinStep.Repeat(digits), null)
+                    step is PinStep.Repeat && step.first == digits -> {
+                        callbacks.onSetPin(digits)
+                        this.state = state.copy(pin = digits)
+                        goPin(PinStep.Idle, "The PIN lock is on.")
+                    }
+                    else -> goPin(PinStep.New, "The two PINs did not match. Start again.")
+                }
+            }
+            PinStep.Idle -> Unit
+        }
+    }
+
+    // ---- Screen (the original Echo app's screen blanking) ----
+
+    private fun blankWords(seconds: Int) = when {
+        seconds <= 0 -> "Never"
+        seconds < 60 -> "$seconds seconds"
+        seconds == 60 -> "1 minute"
+        else -> "${seconds / 60} minutes"
+    }
+
+    private fun drawScreen(state: SettingsScreenState) {
+        note("The screen goes black after this long without a touch, and a touch wakes it. It stays on while live video plays. With the PIN lock on, the PIN is asked for again after the screen has gone black.")
+        content.addView(Theme.text(context, "Blank the screen after", Theme.SMALL_SP, Theme.TEXT_DIM), Widgets.matchWidth().apply { topMargin = dp(20f) })
+        val choices = net.badacid.homeassist.echoshow.screens.FlowLayout(context, dp(10f))
+        for (seconds in net.badacid.homeassist.echoshow.core.BLANK_AFTER_CHOICES) {
+            choices.addView(net.badacid.homeassist.echoshow.screens.panel.panelButton(context, blankWords(seconds), seconds == state.blankAfterSeconds, true, null) {
+                callbacks.onSetBlankAfter(seconds)
+                this.state = state.copy(blankAfterSeconds = seconds)
+                draw()
+            })
+        }
+        content.addView(choices, Widgets.matchWidth().apply { topMargin = dp(8f) })
     }
 
     // ---- About (AboutSection.tsx) ----

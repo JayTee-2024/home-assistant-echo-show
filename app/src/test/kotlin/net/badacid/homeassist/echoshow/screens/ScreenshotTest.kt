@@ -58,4 +58,15 @@ class ScreenshotTest {
         snapshot(ConnectingView(context, "http://192.168.1.100:8123", OpenFailure.CANNOT_REACH) {}, "connecting-failed")
     }
 
+
+    @Test
+    fun signInLookingOnTheNetwork() {
+        val scope = TestScope(StandardTestDispatcher())
+        val flow = SignInFlow({ throw IOException("unused") }, scope, { 0L }, null, null, null, { CompletableDeferred<String?>().await() }) {}
+        flow.start()
+        scope.testScheduler.advanceUntilIdle()
+        val view = SignInView(context, flow)
+        view.show(flow.state.value)
+        snapshot(view, "sign-in-looking")
+    }
 }

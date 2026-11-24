@@ -61,11 +61,13 @@ class AppModelTest {
         var signOutWait: CompletableDeferred<Unit>? = null
         var closed = false
         var signedOut = false
+        var signOuts = 0
         override suspend fun call(call: ServiceCall) {
             calls += call
             refuseWith?.let { throw CommandRefused(it) }
         }
         override suspend fun signOut() {
+            signOuts += 1
             signOutWait?.await()
             signedOut = true
             closed = true
@@ -92,10 +94,10 @@ class AppModelTest {
         clock = { testScheduler.currentTime },
     )
 
-    private fun savedWith(vararg devices: Pair<String, CardSize>, signIn: SavedSignIn? = account): MemoryStorage {
+    private fun savedWith(vararg devices: Pair<String, CardSize>, signIn: SavedSignIn? = account, pin: String? = null): MemoryStorage {
         var layout = net.badacid.homeassist.echoshow.core.EMPTY_LAYOUT
         for ((id, size) in devices) layout = addCard(layout, id, size)
-        return MemoryStorage(serialiseSavedState(EMPTY_SAVED_STATE.copy(signIn = signIn, layout = layout, layoutAddress = signIn?.address)))
+        return MemoryStorage(serialiseSavedState(EMPTY_SAVED_STATE.copy(signIn = signIn, layout = layout, layoutAddress = signIn?.address, pin = pin)))
     }
 
     private fun TestScope.connectedModel(vararg devices: Pair<String, CardSize>): Pair<AppModel, FakeConnection> {
@@ -257,6 +259,96 @@ class AppModelTest {
         model.closeOverlay()
         model.holdCard("device:dev_lifx_lamp")
         assertEquals(Overlay.Panel("device:dev_lifx_lamp"), model.state.value.overlay)
+    }
+
+    @Test
+    fun `Reorganise opens over the home screen and saving the new layout closes it`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.openSettings()
+        model.openReorganise()
+        assertEquals(Overlay.Reorganise, model.state.value.overlay)
+        val moved = net.badacid.homeassist.echoshow.core.Layout(listOf(net.badacid.homeassist.echoshow.core.CardPlace("device:dev_lifx_lamp", 0, 3, 2, CardSize.SMALL)))
+        model.saveLayout(moved)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        assertEquals(moved, model.state.value.saved.layout)
+    }
+
+    @Test
+    fun `a second sign-out while the first is waiting is ignored`() = runTest {
+        val (model, connection) = connectedModel()
+        connection.signOutWait = CompletableDeferred()
+        model.signOut()
+        runCurrent()
+        model.signOut()
+        runCurrent()
+        assertEquals(1, connection.signOuts)
+    }
+
+    @Test
+    fun `a refusal during sign-out keeps the person's own sign-out, with no message`() = runTest {
+        val (model, connection) = connectedModel()
+        connection.signOutWait = CompletableDeferred()
+        model.signOut()
+        runCurrent()
+        connection.status.value = ConnectionStatus.SIGN_IN_REJECTED
+        runCurrent()
+        connection.signOutWait!!.complete(Unit)
+        runCurrent()
+        assertEquals(Phase.SIGNED_OUT, model.state.value.phase)
+        assertNull(model.state.value.notice)
+    }
+
+    @Test
+    fun `a saved PIN starts the app locked, and without one it never locks`() = runTest {
+        attempts += { FakeConnection() }
+        val locked = model(savedWith(pin = "1234"))
+        locked.start()
+        runCurrent()
+        assertTrue(locked.state.value.isLocked)
+        attempts += { FakeConnection() }
+        val open = model(savedWith())
+        open.start()
+        runCurrent()
+        open.lock()
+        assertFalse(open.state.value.isLocked)
+    }
+
+    @Test
+    fun `lock closes Settings and unlocking shows the plain home screen`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.setPin("1234")
+        model.openSettings()
+        model.lock()
+        assertTrue(model.state.value.isLocked)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        model.unlock()
+        assertFalse(model.state.value.isLocked)
+        assertEquals(Overlay.None, model.state.value.overlay)
+        assertEquals("1234", model.state.value.saved.pin)
+    }
+
+    @Test
+    fun `while locked nothing can open over the lock screen`() = runTest {
+        val (model, _) = connectedModel("device:dev_lifx_lamp" to CardSize.SMALL)
+        model.setPin("1234")
+        model.lock()
+        model.holdCard("device:dev_lifx_lamp")
+        model.openSettings()
+        model.openReorganise()
+        assertEquals(Overlay.None, model.state.value.overlay)
+    }
+
+    @Test
+    fun `signing out from the lock screen removes the PIN and the lock`() = runTest {
+        val (model, _) = connectedModel()
+        model.setPin("1234")
+        model.lock()
+        model.signOut()
+        advanceTimeBy(6_000)
+        runCurrent()
+        assertNull(model.state.value.saved.pin)
+        assertFalse(model.state.value.isLocked)
+        assertEquals(Phase.SIGNED_OUT, model.state.value.phase)
     }
 
     @Test

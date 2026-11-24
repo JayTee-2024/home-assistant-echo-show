@@ -26,4 +26,6 @@ object SwitchLogic : DeviceLogic {
         if (!view.isAvailable) return UNAVAILABLE
         return if (view.isOn) "On" else "Off"
     }
+
+    override fun panel(entity: EntityState) = switchPanel(entity)
 }

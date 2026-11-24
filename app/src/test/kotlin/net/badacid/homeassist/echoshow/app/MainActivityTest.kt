@@ -53,7 +53,7 @@ class MainActivityTest {
         override fun close() = Unit
     }
 
-    private fun saved(signedIn: Boolean) = Memory(
+    private fun saved(signedIn: Boolean, pin: String? = null) = Memory(
         serialiseSavedState(
             EMPTY_SAVED_STATE.copy(
                 signIn = if (signedIn) signIn else null,
@@ -62,12 +62,13 @@ class MainActivityTest {
                     CardPlace("device:dev_tado", 1, 0, 0, CardSize.WIDE),
                 )),
                 layoutAddress = signIn.address,
+                pin = pin,
             ),
         ),
     )
 
-    private fun useFakes(signedIn: Boolean = true) {
-        app.storageForTests = saved(signedIn)
+    private fun useFakes(signedIn: Boolean = true, pin: String? = null) {
+        app.storageForTests = saved(signedIn, pin)
         app.openerForTests = { _, _ -> opens++; FakeConnection() }
     }
 
@@ -123,5 +124,70 @@ class MainActivityTest {
         idle()
         assertFalse(activity.get().isFinishing)
         assertNotNull(activity.find<HomeView>())
+    }
+
+    @Test
+    fun `the activity stopping stops live video and lets the screen sleep again`() {
+        useFakes()
+        var stopped = false
+        val sessionState = MutableStateFlow(net.badacid.homeassist.echoshow.core.LiveState.CONNECTING)
+        app.liveForTests = object : net.badacid.homeassist.echoshow.screens.camera.LiveVideoAccess {
+            override suspend fun canStream(entityId: String) = true
+            override fun start(entityId: String) = object : net.badacid.homeassist.echoshow.screens.camera.LiveSession {
+                override val state = sessionState
+                override val videoView = View(app)
+                override fun setMuted(muted: Boolean) = Unit
+                override fun stop() { stopped = true }
+            }
+        }
+        val activity = launch()
+        app.model.holdCard("device:dev_ring")
+        idle()
+        val camera = activity.find<net.badacid.homeassist.echoshow.screens.camera.CameraView>()!!
+        val keepOn = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        val found = ArrayList<View>()
+        camera.findViewsWithText(found, "Watch live", View.FIND_VIEWS_WITH_TEXT)
+        found.first().performClick()
+        idle()
+        assertEquals(keepOn, activity.get().window.attributes.flags and keepOn)
+        activity.pause().stop()
+        idle()
+        assertEquals(true, stopped)
+    }
+
+    @Test
+    fun `with a PIN the app opens locked, and leaving the screen locks it again`() {
+        useFakes(pin = "1234")
+        val activity = launch()
+        assertNotNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+        app.model.unlock()
+        idle()
+        assertNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+        activity.pause().stop()
+        idle()
+        activity.start().resume()
+        idle()
+        assertNotNull(activity.find<net.badacid.homeassist.echoshow.screens.lock.LockView>())
+    }
+
+    @Test
+    fun `after the time the screen blanks and locks, and a tap only wakes it`() {
+        useFakes(pin = "1234")
+        val activity = launch()
+        app.model.unlock()
+        idle()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(31))
+        val blank = activity.get().window.decorView.findViewWithTag<View>("blank-screen")
+        assertEquals(View.VISIBLE, blank.visibility)
+        assertEquals(true, app.model.state.value.isLocked)
+        assertEquals(android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF, activity.get().window.attributes.screenBrightness)
+        // A tap wakes the screen; it does not reach the lock screen's keys underneath.
+        val time = android.os.SystemClock.uptimeMillis()
+        activity.get().dispatchTouchEvent(android.view.MotionEvent.obtain(time, time, android.view.MotionEvent.ACTION_DOWN, 640f, 400f, 0))
+        activity.get().dispatchTouchEvent(android.view.MotionEvent.obtain(time, time + 50, android.view.MotionEvent.ACTION_UP, 640f, 400f, 0))
+        idle()
+        assertEquals(View.GONE, blank.visibility)
+        assertEquals(android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, activity.get().window.attributes.screenBrightness)
+        assertEquals(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, activity.get().window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 }

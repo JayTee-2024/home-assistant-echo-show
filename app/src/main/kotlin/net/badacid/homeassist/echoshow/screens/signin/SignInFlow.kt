@@ -55,9 +55,16 @@ class SignInFlow(
     private val startAddress: String?,
     private val notice: String?,
     private val refusedToken: String?,
+    /**
+     * Looks for Home Assistant on the network, giving its address or null. Used when nothing is saved:
+     * Android 11 cannot look up homeassistant.local, which the LG app tries.
+     */
+    private val find: (suspend () -> String?)? = null,
     private val onSignedIn: (SavedSignIn) -> Unit,
 ) {
-    private val flow = MutableStateFlow(SignInUiState(address = startAddress ?: "http://$DEFAULT_ADDRESS", typedToken = refusedToken))
+    private val flow = MutableStateFlow(
+        SignInUiState(address = startAddress ?: if (find != null) "" else "http://$DEFAULT_ADDRESS", typedToken = refusedToken),
+    )
     val state: StateFlow<SignInUiState> = flow.asStateFlow()
 
     private var flowId = ""
@@ -67,10 +74,28 @@ class SignInFlow(
 
     /** On first showing: try the starting address at once, or show the refused token to correct. */
     fun start() {
-        if (refusedToken != null) {
-            flow.value = flow.value.copy(form = SignInForm.TOKEN, message = notice)
-        } else {
-            tryAddress(flow.value.address)
+        val looker = find
+        when {
+            refusedToken != null -> flow.value = flow.value.copy(form = SignInForm.TOKEN, message = notice)
+            startAddress == null && looker != null -> lookOnNetwork(looker)
+            else -> tryAddress(flow.value.address)
+        }
+    }
+
+    /** Looks for Home Assistant; tries what it finds, or asks for the address (with no error: nothing failed). */
+    private fun lookOnNetwork(looker: suspend () -> String?) {
+        flow.value = flow.value.copy(form = SignInForm.LOOKING, message = notice, busy = false)
+        request += 1
+        val thisRequest = request
+        scope.launch {
+            val found = looker()
+            if (request != thisRequest) return@launch
+            if (found != null) {
+                tryAddress(found)
+            } else {
+                goTo(SignInForm.ADDRESS)
+                flow.value = flow.value.copy(typedAddress = "", message = notice)
+            }
         }
     }
 
@@ -108,6 +133,8 @@ class SignInFlow(
     fun backToCredentials() = tryAddress(flow.value.address)
 
     fun signIn(username: String, password: String) {
+        // Already waiting for Home Assistant: a second press (or the keyboard's Done) would reuse the flow.
+        if (flow.value.busy) return
         if (username.isEmpty() || password.isEmpty()) return say("Enter your username and password.")
         val address = flow.value.address
         flow.value = flow.value.copy(busy = true, message = null)
@@ -115,6 +142,7 @@ class SignInFlow(
     }
 
     fun verify(code: String) {
+        if (flow.value.busy) return
         val address = flow.value.address
         flow.value = flow.value.copy(busy = true, message = null)
         ask(address) { submitCode(send, address, flowId, code, clock()) }

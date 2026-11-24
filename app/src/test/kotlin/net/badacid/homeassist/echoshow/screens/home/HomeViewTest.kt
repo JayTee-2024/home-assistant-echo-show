@@ -139,6 +139,24 @@ class HomeViewTest {
     }
 
     @Test
+    fun `a camera on a page not shown does not refresh, and starts when its page shows`() {
+        var loads = 0
+        val home = HomeView(context, callbacks, { _, _, _ -> loads++; picture }, CoroutineScope(SupervisorJob() + Dispatchers.Main))
+        val cards = listOf(
+            CardPlace("device:dev_lifx_lamp", 0, 0, 0, CardSize.SMALL),
+            CardPlace("device:dev_ring", 1, 0, 0, CardSize.LARGE),
+        )
+        home.show(state(cards = cards, page = 0))
+        laidOut(home)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(30))
+        assertEquals(0, loads)
+        home.show(state(cards = cards, page = 1))
+        laidOut(home)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        assertTrue(loads > 0)
+    }
+
+    @Test
     fun `the settings button opens settings`() {
         val home = view()
         home.show(state())

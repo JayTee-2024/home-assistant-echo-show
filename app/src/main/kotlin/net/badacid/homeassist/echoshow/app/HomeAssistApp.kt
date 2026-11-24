@@ -24,6 +24,10 @@ class HomeAssistApp : Application() {
     /** For tests: set before the model is first used. */
     internal var storageForTests: SavedTextStorage? = null
     internal var openerForTests: ConnectionOpener? = null
+    internal var liveForTests: net.badacid.homeassist.echoshow.screens.camera.LiveVideoAccess? = null
+
+    /** When live view last stopped for each camera, for the picture labels. */
+    val pictureUpdates = net.badacid.homeassist.echoshow.devices.camera.PictureUpdates()
 
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
@@ -61,5 +65,6 @@ class HomeAssistApp : Application() {
         built = null
         storageForTests = null
         openerForTests = null
+        liveForTests = null
     }
 }

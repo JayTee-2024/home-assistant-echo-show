@@ -86,8 +86,10 @@ fun buildDevices(home: HomeSnapshot, partTypes: List<PartType>): List<Device> {
         // through its other entities (a garage opener's "toggle" button, say). Every entity of the device
         // counts here, hidden and disabled ones too: hiding a garage door in Home Assistant does not stop the
         // device's toggle button from opening it.
+        val deviceNames = listOf(registryDevice.nameByUser, registryDevice.name)
         val isProtected = home.entities.any {
-            it.deviceId == registryDevice.id && isProtectedEntity(it, home.states[it.entityId])
+            it.deviceId == registryDevice.id &&
+                (isProtectedEntity(it, home.states[it.entityId]) || isNamedOpener(it, it.entityId, home.states[it.entityId], deviceNames))
         }
         val collected = if (isProtected) emptyList() else collectParts(entries, home, partTypes)
         val isComplete = entries.all { home.states[it.entityId] != null }
@@ -110,6 +112,7 @@ fun buildDevices(home: HomeSnapshot, partTypes: List<PartType>): List<Device> {
     for ((entityId, state) in home.states) {
         val entry = registryByEntityId[entityId]
         if (entry != null && (entry.deviceId != null || !isShown(entry))) continue
+        if (isNamedOpener(entry, entityId, state, emptyList())) continue
 
         val type = partTypeFor(state, partTypes)
         val isListedAnyway = domainOf(entityId) in ALWAYS_LISTED_DOMAINS
@@ -154,6 +157,30 @@ fun isProtectedEntity(entry: RegistryEntity, state: EntityState?): Boolean {
     val kind = readText(state, "device_class")
     return kind == null || kind !in SAFE_COVER_KINDS
 }
+
+/** The kinds of entity that run something when pressed, and so might open a garage or gate. */
+private val PRESSABLE_DOMAINS = setOf("switch", "button", "input_button", "input_boolean", "script", "scene")
+
+/** Whole words that mark something that opens, unlocks or disarms. */
+private val OPENER_WORDS = setOf("garage", "gate", "gates", "unlock", "disarm", "opener")
+
+private fun wordsOf(text: String): Set<String> = text.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }.toSet()
+
+/**
+ * True when the entity id or any of the names reads like something that opens a garage or gate, unlocks or
+ * disarms: one of OPENER_WORDS as a whole word, or both "door" and "open". A switch or button wired to a
+ * garage door looks like any other switch to Home Assistant, so its name is all there is to go on.
+ */
+fun isOpenerByName(entityId: String, names: List<String?>): Boolean =
+    (listOf(entityId.substringAfter('.')) + names.filterNotNull()).any { text ->
+        val words = wordsOf(text)
+        words.any { it in OPENER_WORDS } || ("door" in words && "open" in words)
+    }
+
+/** A pressable entity whose name, or its device's name, reads like an opener (see isOpenerByName). */
+private fun isNamedOpener(entry: RegistryEntity?, entityId: String, state: EntityState?, deviceNames: List<String?>): Boolean =
+    domainOf(entityId) in PRESSABLE_DOMAINS &&
+        isOpenerByName(entityId, listOf(entry?.name, entry?.originalName, state?.let { readText(it, "friendly_name") }) + deviceNames)
 
 /** False for entities the person, or the integration, has switched off or hidden in Home Assistant. */
 private fun isShown(entry: RegistryEntity) = entry.disabledBy == null && entry.hiddenBy == null

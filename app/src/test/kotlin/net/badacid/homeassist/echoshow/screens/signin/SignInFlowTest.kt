@@ -42,8 +42,8 @@ class SignInFlowTest {
 
     private val signedIn = mutableListOf<SavedSignIn>()
 
-    private fun TestScope.flow(answers: Answers, startAddress: String? = null, notice: String? = null, refusedToken: String? = null) =
-        SignInFlow(answers.send, backgroundScope, { 1_000L }, startAddress, notice, refusedToken) { signedIn += it }.also {
+    private fun TestScope.flow(answers: Answers, startAddress: String? = null, notice: String? = null, refusedToken: String? = null, find: (suspend () -> String?)? = null) =
+        SignInFlow(answers.send, backgroundScope, { 1_000L }, startAddress, notice, refusedToken, find) { signedIn += it }.also {
             it.start()
             runCurrent()
         }
@@ -65,6 +65,58 @@ class SignInFlowTest {
         assertEquals(SignInForm.ADDRESS, flow.state.value.form)
         assertEquals("Could not reach Home Assistant at this address.", flow.state.value.message)
         assertEquals("", flow.state.value.typedAddress)
+    }
+
+    @Test
+    fun `Done twice signs in once`() = runTest {
+        val waiting = kotlinx.coroutines.CompletableDeferred<HttpAnswer>()
+        val answers = Answers(form, waiting)
+        val flow = flow(answers, startAddress = "http://192.168.1.100:8123")
+        flow.signIn("simon", "secret")
+        flow.signIn("simon", "secret")
+        runCurrent()
+        assertEquals(2, answers.requests.size)
+    }
+
+    @Test
+    fun `nothing saved - the address found on the network is tried`() = runTest {
+        val answers = Answers(form)
+        var looked = 0
+        val flow = flow(answers, find = { looked++; "http://192.168.1.50:8123" })
+        assertEquals(1, looked)
+        assertEquals("http://192.168.1.50:8123/auth/login_flow", answers.requests.single().url)
+        assertEquals(SignInForm.CREDENTIALS, flow.state.value.form)
+    }
+
+    @Test
+    fun `nothing found - the address form with no error`() = runTest {
+        val answers = Answers()
+        val flow = flow(answers, find = { null })
+        assertEquals(SignInForm.ADDRESS, flow.state.value.form)
+        assertEquals(null, flow.state.value.message)
+        assertEquals("", flow.state.value.typedAddress)
+        assertEquals(0, answers.requests.size)
+    }
+
+    @Test
+    fun `a saved address is tried without looking`() = runTest {
+        var looked = 0
+        flow(Answers(form), startAddress = "http://192.168.1.100:8123", find = { looked++; null })
+        assertEquals(0, looked)
+    }
+
+    @Test
+    fun `while looking, the person can type the address and a late find is ignored`() = runTest {
+        val found = kotlinx.coroutines.CompletableDeferred<String?>()
+        val answers = Answers(form)
+        val flow = flow(answers, find = { found.await() })
+        assertEquals(SignInForm.LOOKING, flow.state.value.form)
+        flow.change()
+        flow.connect("192.168.1.100:8123")
+        runCurrent()
+        found.complete("http://192.168.1.50:8123")
+        runCurrent()
+        assertEquals("http://192.168.1.100:8123", flow.state.value.address)
     }
 
     @Test

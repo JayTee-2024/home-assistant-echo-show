@@ -18,6 +18,7 @@ import net.badacid.homeassist.echoshow.screens.Theme
 import net.badacid.homeassist.echoshow.screens.snapshot
 import net.badacid.homeassist.echoshow.testsupport.sampleHome
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -93,6 +94,17 @@ class GridViewTest {
     }
 
     @Test
+    fun `the More button opens the panel`() {
+        var holds = 0
+        val view = card("device:dev_lifx_lamp", CardSize.SMALL, onHold = { holds++ })
+        laidOut(view, 300, 200)
+        val found = ArrayList<View>()
+        view.findViewsWithText(found, "More", View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
+        found.first().performClick()
+        assertEquals(1, holds)
+    }
+
+    @Test
     fun `moving the finger cancels the hold`() {
         var taps = 0
         var holds = 0
@@ -147,6 +159,20 @@ class GridViewTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
         assertEquals(0, (0 until view.childCount).count { view.getChildAt(it) is CameraPictureView })
         assertEquals(before, loads)
+    }
+
+    @Test
+    fun `showing the same content again does not rebuild the card`() {
+        val view = card("device:dev_lifx_lamp", CardSize.SMALL)
+        val before = view.stateText
+        val content = cardContent("device:dev_lifx_lamp", findDevice(devices, "device:dev_lifx_lamp"), home, CardSize.SMALL)
+        val texts = ArrayList<android.view.View>()
+        view.findViewsWithText(texts, "71%", android.view.View.FIND_VIEWS_WITH_TEXT)
+        view.show(content)
+        val after = ArrayList<android.view.View>()
+        view.findViewsWithText(after, "71%", android.view.View.FIND_VIEWS_WITH_TEXT)
+        assertTrue(texts.single() === after.single())
+        assertTrue(before === view.stateText)
     }
 
     @Test

@@ -21,4 +21,6 @@ object VacuumLogic : DeviceLogic {
     override fun isActive(entity: EntityState) = entity.state == "cleaning" || entity.state == "returning"
 
     override fun summary(entity: EntityState) = readVacuum(entity).words
+
+    override fun panel(entity: EntityState) = vacuumPanel(entity)
 }

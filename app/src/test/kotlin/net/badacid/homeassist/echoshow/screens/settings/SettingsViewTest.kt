@@ -33,9 +33,12 @@ class SettingsViewTest {
     private val calls = mutableListOf<String>()
     private val callbacks = object : SettingsCallbacks {
         override fun onClose() { calls += "close" }
+        override fun onReorganise() { calls += "reorganise" }
         override fun onToggleDevice(device: Device) { calls += "toggle ${device.id}" }
         override fun onSignOut() { calls += "sign out" }
         override fun onOpenLink(address: String) { calls += "open $address" }
+        override fun onSetPin(pin: String?) { calls += "pin $pin" }
+        override fun onSetBlankAfter(seconds: Int) { calls += "blank $seconds" }
     }
 
     private fun state(isToken: Boolean = false) = SettingsScreenState(
@@ -45,6 +48,8 @@ class SettingsViewTest {
         userName = "Simon",
         isToken = isToken,
         version = "0.3.0",
+        pin = null,
+        blankAfterSeconds = 30,
     )
 
     private fun settings(state: SettingsScreenState = state()) = SettingsView(context, callbacks).apply {
@@ -76,6 +81,46 @@ class SettingsViewTest {
         view.show(state().copy(layout = Layout(state().layout.cards + CardPlace("device:dev_lifx_ceiling", 0, 1, 0, CardSize.SMALL))))
         laidOut(view)
         assertTrue(visibleTexts(view.rowWith("Kitchen ceiling")).contains("On screen ✓"))
+    }
+
+    @Test
+    fun `Reorganise layout leaves Settings for the reorganise mode`() {
+        settings().withText("Reorganise layout").performClick()
+        assertEquals(listOf("reorganise"), calls)
+    }
+
+    @Test
+    fun `turning the lock on needs the same PIN twice`() {
+        val view = settings()
+        view.withText("PIN lock").performClick()
+        laidOut(view)
+        view.withText("Turn on PIN lock").performClick()
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertTrue(visibleTexts(view).contains("Type the PIN again"))
+        "1235".forEach { view.withText(it.toString()).performClick() }
+        assertTrue(visibleTexts(view).contains("The two PINs did not match. Start again."))
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertEquals(listOf("pin 1234"), calls)
+    }
+
+    @Test
+    fun `turning the lock off asks for the current PIN`() {
+        val view = settings(state().copy(pin = "1234"))
+        view.withText("PIN lock").performClick()
+        view.withText("Turn off PIN lock").performClick()
+        "1234".forEach { view.withText(it.toString()).performClick() }
+        assertEquals(listOf("pin null"), calls)
+    }
+
+    @Test
+    fun `Screen offers the blanking times, with the current one marked`() {
+        val view = settings()
+        view.withText("Screen").performClick()
+        laidOut(view)
+        assertTrue(visibleTexts(view).containsAll(listOf("Never", "30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes")))
+        view.withText("1 minute").performClick()
+        assertEquals(listOf("blank 60"), calls)
     }
 
     @Test
@@ -130,5 +175,9 @@ class SettingsViewTest {
         snapshot(view, "settings-connection")
         view.withText("About").performClick()
         snapshot(view, "settings-about")
+        view.withText("PIN lock").performClick()
+        snapshot(view, "settings-pin")
+        view.withText("Screen").performClick()
+        snapshot(view, "settings-screen")
     }
 }

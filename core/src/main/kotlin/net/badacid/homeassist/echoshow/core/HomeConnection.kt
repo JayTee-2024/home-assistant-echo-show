@@ -45,6 +45,20 @@ interface HomeConnection {
     suspend fun signOut()
 
     fun close()
+
+    // ---- Live camera video (see WebRtc.kt). Stand-ins without cameras can leave these as they are. ----
+
+    /** True when the camera can send live video by WebRTC (camera/capabilities). */
+    suspend fun cameraCanStream(entityId: String): Boolean = false
+
+    /** The STUN and TURN servers to use for this camera (camera/webrtc/get_client_config). */
+    suspend fun webRtcIceServers(entityId: String): List<IceServerConfig> = emptyList()
+
+    /**
+     * Sends a WebRTC offer for the camera (camera/webrtc/offer); its events arrive through `onMessage`, on
+     * any thread. Closing it ends the subscription. Null when not connected.
+     */
+    fun webRtcOffer(entityId: String, offerSdp: String, onMessage: (WebRtcMessage) -> Unit): java.io.Closeable? = null
 }
 
 /** Why a connection could not be opened. */

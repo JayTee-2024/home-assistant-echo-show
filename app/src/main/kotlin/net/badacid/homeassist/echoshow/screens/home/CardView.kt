@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import net.badacid.homeassist.echoshow.core.CardSize
 import net.badacid.homeassist.echoshow.screens.IconView
+import net.badacid.homeassist.echoshow.screens.Icons
 import net.badacid.homeassist.echoshow.screens.Theme
 import net.badacid.homeassist.echoshow.screens.Widgets
 import kotlin.math.abs
@@ -72,7 +73,15 @@ class CardView(
             addView(room, Widgets.matchWidth())
             addView(extras, Widgets.matchWidth())
         }
-        addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { rightMargin = dp(36f) })
+        // "More" opens the panel, as holding the card does: the same as the LG card's more button.
+        val more = FrameLayout(context).apply {
+            contentDescription = "More"
+            isClickable = true
+            setOnClickListener { onHold() }
+            addView(IconView(context, Icons.MORE, Theme.TEXT_DIM), LayoutParams(dp(26f), dp(26f), Gravity.CENTER))
+        }
+        addView(more, LayoutParams(dp(Theme.TOUCH_DP), dp(Theme.TOUCH_DP), Gravity.BOTTOM or Gravity.END).apply { rightMargin = -dp(12f); bottomMargin = -dp(12f) })
     }
 
     private var dimmed = false
@@ -107,7 +116,12 @@ class CardView(
         alpha = restingAlpha() * if (pressing) 0.7f else 1f
     }
 
+    private var shownContent: CardContent? = null
+
     fun show(content: CardContent) {
+        // Home Assistant reports often; a card whose content has not changed keeps its views as they are.
+        if (content == shownContent) return
+        shownContent = content
         contentDescription = content.name
         val active = content.isActive
         panel.setColor(if (active) Theme.AMBER_DIM else Theme.SURFACE)
@@ -150,6 +164,7 @@ class CardView(
         if (face.isPicture && content.mainEntity != null && makePicture != null) {
             val view = picture ?: makePicture.invoke().also {
                 picture = it
+                it.isActive = pictureActive
                 addView(it, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply { bottomMargin = dp(if (size == CardSize.LARGE) 92f else 60f) })
             }
             view.show(content.mainEntity)
@@ -217,6 +232,14 @@ class CardView(
         onTap()
         return true
     }
+
+    /** Only the cards on the page being shown fetch camera pictures. */
+    fun setPictureActive(active: Boolean) {
+        pictureActive = active
+        picture?.isActive = active
+    }
+
+    private var pictureActive = true
 
     /** For tests and accessibility: the visible state line. */
     val stateText: TextView get() = state

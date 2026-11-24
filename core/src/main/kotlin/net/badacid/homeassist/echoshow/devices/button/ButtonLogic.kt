@@ -21,4 +21,6 @@ object ButtonLogic : DeviceLogic {
     override fun isActive(entity: EntityState) = false
 
     override fun summary(entity: EntityState): String? = null
+
+    override fun panel(entity: EntityState) = buttonPanel(entity)
 }

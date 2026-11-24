@@ -114,6 +114,7 @@ class HomeView(
         }
 
         val pages = pageCount(layout)
+        for ((place, card) in cards) card.setPictureActive(place.page == state.page)
         pager.showPage(state.page, animate = shownPage >= 0)
         shownPage = state.page
         showDots(if (pages > 1) pages else 0, state.page)

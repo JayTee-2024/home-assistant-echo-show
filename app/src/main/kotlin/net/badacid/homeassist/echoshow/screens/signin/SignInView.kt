@@ -74,8 +74,14 @@ class SignInView(context: Context, private val flow: SignInFlow) : FrameLayout(c
 
     fun show(state: SignInUiState) {
         addressBox.visibility = if (state.form == SignInForm.ADDRESS) View.GONE else View.VISIBLE
-        addressLabel.text = if (state.form == SignInForm.LOOKING) "Looking for Home Assistant at" else "Home Assistant found at"
+        addressLabel.text = when {
+            // Searching the network: there is no address yet.
+            state.address.isEmpty() -> "Looking for Home Assistant on your network…"
+            state.form == SignInForm.LOOKING -> "Looking for Home Assistant at"
+            else -> "Home Assistant found at"
+        }
         addressValue.text = state.shownAddress
+        addressValue.visibility = if (state.address.isEmpty()) View.GONE else View.VISIBLE
         message.text = state.message ?: ""
         message.visibility = if (state.message == null) View.GONE else View.VISIBLE
 

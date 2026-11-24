@@ -27,6 +27,9 @@ enum class Phase {
 sealed interface Overlay {
     data object None : Overlay
     data object Settings : Overlay
+
+    /** The "Reorganise layout" mode, opened from Settings. */
+    data object Reorganise : Overlay
     data class Panel(val deviceId: String) : Overlay
 }
 
@@ -49,4 +52,6 @@ data class AppState(
     /** A short message at the bottom of the screen. */
     val toast: String? = null,
     val userName: String = "",
+    /** The PIN lock screen is up. Only ever true while a PIN is saved. */
+    val isLocked: Boolean = false,
 )

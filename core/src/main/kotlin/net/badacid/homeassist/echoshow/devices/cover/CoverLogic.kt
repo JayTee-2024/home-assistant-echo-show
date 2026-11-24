@@ -33,4 +33,6 @@ object CoverLogic : DeviceLogic {
         val words = coverWords(view).replace("…", "")
         return if (view.position == null) words else "$words · ${view.position}%"
     }
+
+    override fun panel(entity: EntityState) = coverPanel(entity)
 }

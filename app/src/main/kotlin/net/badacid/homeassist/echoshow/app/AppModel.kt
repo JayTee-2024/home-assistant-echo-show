@@ -19,6 +19,7 @@ import net.badacid.homeassist.echoshow.core.Device
 import net.badacid.homeassist.echoshow.core.EMPTY_HOME
 import net.badacid.homeassist.echoshow.core.HomeConnection
 import net.badacid.homeassist.echoshow.core.HomeSnapshot
+import net.badacid.homeassist.echoshow.core.Layout
 import net.badacid.homeassist.echoshow.core.OpenFailed
 import net.badacid.homeassist.echoshow.core.OpenFailure
 import net.badacid.homeassist.echoshow.core.PendingStates
@@ -90,6 +91,8 @@ class AppModel(
     fun start() {
         if (started) return
         started = true
+        // The app starts locked when a PIN is set, as the LG app does.
+        if (saved.pin != null) publish { it.copy(isLocked = true) }
         val signIn = saved.signIn
         if (signIn == null) publish { it.copy(phase = Phase.SIGNED_OUT) } else connect(signIn)
     }
@@ -129,10 +132,45 @@ class AppModel(
     private fun openPanel(deviceId: String) {
         // A card for a device Home Assistant no longer has has no panel to open.
         if (findDevice(flow.value.devices, deviceId) == null) return
-        publish { it.copy(overlay = Overlay.Panel(deviceId)) }
+        openOverlay(Overlay.Panel(deviceId))
     }
 
-    fun openSettings() = publish { it.copy(overlay = Overlay.Settings) }
+    /** The open connection, for live video, or null while there is none. */
+    fun currentConnection(): HomeConnection? = connection
+
+    fun openSettings() = openOverlay(Overlay.Settings)
+
+    /** Nothing opens while the PIN lock is up: a late tap or hold timer must not draw over the lock. */
+    private fun openOverlay(overlay: Overlay) {
+        if (flow.value.isLocked) return
+        publish { it.copy(overlay = overlay) }
+    }
+
+    // ---- The PIN lock ----
+
+    /** Settings' Screen section: seconds before the screen blanks, 0 never. */
+    fun setBlankAfter(seconds: Int) = updateSaved { it.copy(blankAfterSeconds = seconds.coerceAtLeast(0)) }
+
+    /** Settings' PIN section: a new PIN, or null to turn the lock off. */
+    fun setPin(pin: String?) = updateSaved { it.copy(pin = pin) }
+
+    /** Locks the app (it left the screen), closing whatever was open. Does nothing without a PIN. */
+    fun lock() {
+        if (saved.pin == null) return
+        publish { it.copy(isLocked = true, overlay = Overlay.None) }
+    }
+
+    /** The lock screen took the right PIN. */
+    fun unlock() = publish { it.copy(isLocked = false) }
+
+    /** Settings' "Reorganise layout". */
+    fun openReorganise() = openOverlay(Overlay.Reorganise)
+
+    /** The reorganise mode's Done: keeps the new layout and goes back to the home screen. */
+    fun saveLayout(layout: Layout) {
+        updateSaved { it.copy(layout = layout) }
+        publish { it.copy(overlay = Overlay.None) }
+    }
 
     fun closeOverlay() = publish { it.copy(overlay = Overlay.None) }
 
@@ -186,7 +224,12 @@ class AppModel(
     }
 
     /** Signs out for real: Home Assistant cancels this Echo's sign-in, then the Echo forgets it. */
+    /** True from Sign out until the sign-in screen shows: a second Sign out is ignored. */
+    private var signingOut = false
+
     fun signOut() {
+        if (signingOut) return
+        signingOut = true
         val current = connection
         var done = false
         val finish = {
@@ -273,6 +316,7 @@ class AppModel(
 
     /** Forgets the sign-in on this Echo and shows the sign-in screen. The layout is kept. */
     private fun signOutLocally(reason: String?, refusedToken: String? = null) {
+        signingOut = false
         // Ends any attempt in progress (see `attempt`).
         attempt += 1
         retry?.cancel()
@@ -291,6 +335,7 @@ class AppModel(
                 page = 0,
                 notice = reason,
                 refusedToken = refusedToken,
+                isLocked = false,
                 status = ConnectionStatus.CONNECTED,
             )
         }
