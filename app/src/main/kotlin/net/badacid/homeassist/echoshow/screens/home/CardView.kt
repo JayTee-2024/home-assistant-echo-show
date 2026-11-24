@@ -116,7 +116,12 @@ class CardView(
         alpha = restingAlpha() * if (pressing) 0.7f else 1f
     }
 
+    private var shownContent: CardContent? = null
+
     fun show(content: CardContent) {
+        // Home Assistant reports often; a card whose content has not changed keeps its views as they are.
+        if (content == shownContent) return
+        shownContent = content
         contentDescription = content.name
         val active = content.isActive
         panel.setColor(if (active) Theme.AMBER_DIM else Theme.SURFACE)
@@ -159,6 +164,7 @@ class CardView(
         if (face.isPicture && content.mainEntity != null && makePicture != null) {
             val view = picture ?: makePicture.invoke().also {
                 picture = it
+                it.isActive = pictureActive
                 addView(it, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply { bottomMargin = dp(if (size == CardSize.LARGE) 92f else 60f) })
             }
             view.show(content.mainEntity)
@@ -226,6 +232,14 @@ class CardView(
         onTap()
         return true
     }
+
+    /** Only the cards on the page being shown fetch camera pictures. */
+    fun setPictureActive(active: Boolean) {
+        pictureActive = active
+        picture?.isActive = active
+    }
+
+    private var pictureActive = true
 
     /** For tests and accessibility: the visible state line. */
     val stateText: TextView get() = state

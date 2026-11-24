@@ -133,6 +133,8 @@ class SignInFlow(
     fun backToCredentials() = tryAddress(flow.value.address)
 
     fun signIn(username: String, password: String) {
+        // Already waiting for Home Assistant: a second press (or the keyboard's Done) would reuse the flow.
+        if (flow.value.busy) return
         if (username.isEmpty() || password.isEmpty()) return say("Enter your username and password.")
         val address = flow.value.address
         flow.value = flow.value.copy(busy = true, message = null)
@@ -140,6 +142,7 @@ class SignInFlow(
     }
 
     fun verify(code: String) {
+        if (flow.value.busy) return
         val address = flow.value.address
         flow.value = flow.value.copy(busy = true, message = null)
         ask(address) { submitCode(send, address, flowId, code, clock()) }

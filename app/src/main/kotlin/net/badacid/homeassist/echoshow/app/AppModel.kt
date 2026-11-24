@@ -215,7 +215,12 @@ class AppModel(
     }
 
     /** Signs out for real: Home Assistant cancels this Echo's sign-in, then the Echo forgets it. */
+    /** True from Sign out until the sign-in screen shows: a second Sign out is ignored. */
+    private var signingOut = false
+
     fun signOut() {
+        if (signingOut) return
+        signingOut = true
         val current = connection
         var done = false
         val finish = {
@@ -302,6 +307,7 @@ class AppModel(
 
     /** Forgets the sign-in on this Echo and shows the sign-in screen. The layout is kept. */
     private fun signOutLocally(reason: String?, refusedToken: String? = null) {
+        signingOut = false
         // Ends any attempt in progress (see `attempt`).
         attempt += 1
         retry?.cancel()

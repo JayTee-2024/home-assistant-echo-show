@@ -68,6 +68,17 @@ class SignInFlowTest {
     }
 
     @Test
+    fun `Done twice signs in once`() = runTest {
+        val waiting = kotlinx.coroutines.CompletableDeferred<HttpAnswer>()
+        val answers = Answers(form, waiting)
+        val flow = flow(answers, startAddress = "http://192.168.1.100:8123")
+        flow.signIn("simon", "secret")
+        flow.signIn("simon", "secret")
+        runCurrent()
+        assertEquals(2, answers.requests.size)
+    }
+
+    @Test
     fun `nothing saved - the address found on the network is tried`() = runTest {
         val answers = Answers(form)
         var looked = 0

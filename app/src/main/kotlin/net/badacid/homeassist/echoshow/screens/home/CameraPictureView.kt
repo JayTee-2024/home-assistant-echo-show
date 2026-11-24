@@ -71,12 +71,26 @@ class CameraPictureView(
             words.visibility = VISIBLE
             return
         }
-        if (pathChanged || loading == null) restart()
+        if (isActive && (pathChanged || loading == null)) restart()
+    }
+
+    /** False while the card's page is not shown: no pictures are fetched. */
+    var isActive = true
+        set(value) {
+            if (field == value) return
+            field = value
+            if (!value) stop() else entity?.let { if (readCamera(it).isAvailable) restart() }
+        }
+
+    /** The screen went dark or the app left it: stop fetching until it is back. */
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility != VISIBLE) stop() else if (isActive && loading == null) entity?.let { if (readCamera(it).isAvailable) restart() }
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        entity?.let { if (loading == null) restart() }
+        entity?.let { if (isActive && loading == null) restart() }
     }
 
     override fun onDetachedFromWindow() {

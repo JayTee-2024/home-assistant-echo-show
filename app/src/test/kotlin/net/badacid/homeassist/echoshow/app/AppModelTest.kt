@@ -61,11 +61,13 @@ class AppModelTest {
         var signOutWait: CompletableDeferred<Unit>? = null
         var closed = false
         var signedOut = false
+        var signOuts = 0
         override suspend fun call(call: ServiceCall) {
             calls += call
             refuseWith?.let { throw CommandRefused(it) }
         }
         override suspend fun signOut() {
+            signOuts += 1
             signOutWait?.await()
             signedOut = true
             closed = true
@@ -269,6 +271,31 @@ class AppModelTest {
         model.saveLayout(moved)
         assertEquals(Overlay.None, model.state.value.overlay)
         assertEquals(moved, model.state.value.saved.layout)
+    }
+
+    @Test
+    fun `a second sign-out while the first is waiting is ignored`() = runTest {
+        val (model, connection) = connectedModel()
+        connection.signOutWait = CompletableDeferred()
+        model.signOut()
+        runCurrent()
+        model.signOut()
+        runCurrent()
+        assertEquals(1, connection.signOuts)
+    }
+
+    @Test
+    fun `a refusal during sign-out keeps the person's own sign-out, with no message`() = runTest {
+        val (model, connection) = connectedModel()
+        connection.signOutWait = CompletableDeferred()
+        model.signOut()
+        runCurrent()
+        connection.status.value = ConnectionStatus.SIGN_IN_REJECTED
+        runCurrent()
+        connection.signOutWait!!.complete(Unit)
+        runCurrent()
+        assertEquals(Phase.SIGNED_OUT, model.state.value.phase)
+        assertNull(model.state.value.notice)
     }
 
     @Test

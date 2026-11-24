@@ -69,8 +69,13 @@ object Widgets {
             background = Theme.roundedPanel(context, Theme.SURFACE, 10f, strokeColour = Theme.SURFACE_RAISED)
             val side = Theme.dp(context, 14f)
             setPadding(side, side, side, side)
-            setOnEditorActionListener { _, _, _ ->
-                onDone?.invoke()
+            setOnEditorActionListener { _, actionId, event ->
+                // A hardware Enter arrives twice (key down and key up): act on the key down only.
+                if (event != null && event.action != android.view.KeyEvent.ACTION_DOWN) return@setOnEditorActionListener onDone != null
+                val isSubmit = actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
+                    actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
+                    actionId == android.view.inputmethod.EditorInfo.IME_NULL
+                if (isSubmit) onDone?.invoke()
                 onDone != null
             }
         }
