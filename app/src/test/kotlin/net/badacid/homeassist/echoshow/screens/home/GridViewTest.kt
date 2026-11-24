@@ -116,6 +116,25 @@ class GridViewTest {
     }
 
     @Test
+    fun `a short wide card drops extra lines that would run into its state`() {
+        val view = card("device:dev_tado", CardSize.WIDE)
+        laidOut(view, 600, 180)
+        val texts = mutableListOf<String>()
+        fun walk(v: android.view.View) {
+            if (v.visibility != android.view.View.VISIBLE) return
+            if (v is android.widget.TextView) texts += v.text.toString()
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(view)
+        assertEquals(false, "Temperature 20.5 °C" in texts)
+        assertEquals(true, "Living room heating" in texts)
+        laidOut(view, 600, 260)
+        texts.clear()
+        walk(view)
+        assertEquals(true, "Temperature 20.5 °C" in texts)
+    }
+
+    @Test
     fun `home grid screenshot`() {
         val picture = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(70, 90, 110)) }
         val loader = PictureLoader { _, _, _ -> picture }

@@ -43,6 +43,8 @@ class CardView(
     private val name = Theme.text(context, "", Theme.CARD_NAME_SP, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
     private val room = Theme.text(context, "", Theme.CARD_LINE_SP, Theme.TEXT_DIM).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
     private val extras = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private val top: LinearLayout
+    private val names: LinearLayout
     private var picture: CameraPictureView? = null
     private var iconPath: String? = null
     private var iconView: IconView? = null
@@ -58,13 +60,13 @@ class CardView(
             addView(big, Widgets.wrap())
             addView(details, Widgets.wrap())
         }
-        val top = LinearLayout(context).apply {
+        top = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(icon, LinearLayout.LayoutParams(dp(36f), dp(36f)))
             addView(faceColumn, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(8f) })
         }
         addView(top, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.TOP))
-        val names = LinearLayout(context).apply {
+        names = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(name, Widgets.matchWidth())
             addView(room, Widgets.matchWidth())
@@ -73,12 +75,45 @@ class CardView(
         addView(names, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
     }
 
+    private var dimmed = false
+
+    /** A short card drops its last extra lines rather than let them run into the state at the top. */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        for (i in 0 until extras.childCount) extras.getChildAt(i).visibility = VISIBLE
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        if (picture != null) return
+        var shown = extras.childCount
+        while (shown > 0 && paddingTop + top.measuredHeight + Theme.dp(context, 8f) + names.measuredHeight + paddingBottom > measuredHeight) {
+            shown -= 1
+            extras.getChildAt(shown).visibility = GONE
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }
+
+    /** True while the connection is down: the card shows its last known state, dimmed. */
+    var stale = false
+        set(value) {
+            field = value
+            applyAlpha()
+        }
+
+    private fun restingAlpha() = when {
+        stale -> 0.5f
+        dimmed -> 0.6f
+        else -> 1f
+    }
+
+    private fun applyAlpha() {
+        alpha = restingAlpha() * if (pressing) 0.7f else 1f
+    }
+
     fun show(content: CardContent) {
         contentDescription = content.name
         val active = content.isActive
         panel.setColor(if (active) Theme.AMBER_DIM else Theme.SURFACE)
         panel.setStroke(dp(2f), if (active) Theme.AMBER else Theme.SURFACE)
-        alpha = if (content.isUnavailable || content.isMissing) 0.6f else 1f
+        dimmed = content.isUnavailable || content.isMissing
+        applyAlpha()
 
         if (content.icon != iconPath) {
             iconPath = content.icon
@@ -133,10 +168,9 @@ class CardView(
     private val hold = Runnable {
         held = true
         pressing = false
-        alpha = alphaBeforePress
+        applyAlpha()
         onHold()
     }
-    private var alphaBeforePress = 1f
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -146,8 +180,7 @@ class CardView(
                 downY = event.y
                 held = false
                 pressing = true
-                alphaBeforePress = alpha
-                alpha = alphaBeforePress * 0.7f
+                applyAlpha()
                 timer.postDelayed(hold, HOLD_MS)
             }
             MotionEvent.ACTION_MOVE -> if (pressing && (abs(event.x - downX) > slop || abs(event.y - downY) > slop)) cancelPress()
@@ -163,8 +196,8 @@ class CardView(
 
     private fun cancelPress() {
         timer.removeCallbacks(hold)
-        if (pressing) alpha = alphaBeforePress
         pressing = false
+        applyAlpha()
     }
 
     override fun onDetachedFromWindow() {
