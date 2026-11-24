@@ -190,4 +190,20 @@ class MainActivityTest {
         assertEquals(android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, activity.get().window.attributes.screenBrightness)
         assertEquals(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, activity.get().window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
+
+    @Test
+    fun `blanking hides the status and navigation bars, even if they had been brought back`() {
+        useFakes()
+        val activity = launch()
+        val decor = activity.get().window.decorView
+        // As if the person had swiped the bars in, or something had brought them back.
+        @Suppress("DEPRECATION")
+        decor.systemUiVisibility = 0
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(31))
+        @Suppress("DEPRECATION")
+        val flags = decor.systemUiVisibility
+        @Suppress("DEPRECATION")
+        val wanted = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        assertEquals(wanted, flags and wanted)
+    }
 }
