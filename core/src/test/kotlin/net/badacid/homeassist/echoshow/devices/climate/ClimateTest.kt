@@ -136,6 +136,47 @@ class ClimateTest {
         }
     }
 
+    /** What the card shows straight after a press, before Home Assistant reports. */
+    @Nested
+    inner class PredictedDoing {
+        private val idleAt14 = changed(tado, mapOf("temperature" to 14, "current_temperature" to 22.1, "hvac_action" to "idle"))
+        private val off = changed(tado, mapOf("temperature" to null, "hvac_action" to "off"), "off")
+        private fun doing(action: net.badacid.homeassist.echoshow.devices.Action) = readClimate(action.predicted).hvacAction
+
+        @Test
+        fun `a target above the room temperature shows as heating, and the card is on`() {
+            val predicted = setTarget(idleAt14, 23.0).predicted
+            assertEquals("heating", readClimate(predicted).hvacAction)
+            assertTrue(ClimateLogic.isActive(predicted))
+        }
+
+        @Test
+        fun `a target at or below the room temperature shows as idle`() {
+            assertEquals("idle", doing(setTarget(tado, 19.0)))
+            assertEquals("idle", doing(setTarget(tado, 20.5)))
+        }
+
+        @Test
+        fun `switching off shows as off, and switching on no longer says Off`() {
+            assertEquals("off", doing(setHvacMode(tado, "off")))
+            assertEquals("idle", doing(setHvacMode(off, "heat")))
+            assertEquals("idle", doing(setHvacMode(idleAt14, "heat")))
+            assertEquals("heating", doing(setHvacMode(changed(tado, emptyMap(), "off"), "heat")))
+        }
+
+        @Test
+        fun `a target set while off does not pretend the heating is on`() {
+            assertEquals("off", doing(setTarget(off, 23.0)))
+        }
+
+        @Test
+        fun `a thermostat that never says what it is doing gets no guess`() {
+            val quiet = net.badacid.homeassist.echoshow.core.EntityState(tado.entityId, tado.state, kotlinx.serialization.json.JsonObject(tado.attributes - "hvac_action"))
+            assertEquals(null, doing(setTarget(quiet, 23.0)))
+            assertEquals(null, doing(setHvacMode(quiet, "off")))
+        }
+    }
+
     @Nested
     inner class TheHeatingType {
         @Test
