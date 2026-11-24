@@ -187,10 +187,13 @@ class ClimateTest {
         }
 
         @Test
-        fun `is shown as on while heating, and off when idle or off`() {
+        fun `is shown as on whenever it is switched on, heating or idle, and off when off or unavailable`() {
             assertTrue(ClimateLogic.isActive(tado))
-            assertFalse(ClimateLogic.isActive(changed(tado, mapOf("hvac_action" to "idle"))))
+            assertTrue(ClimateLogic.isActive(changed(tado, mapOf("hvac_action" to "idle"))))
+            assertTrue(ClimateLogic.isActive(changed(tado, mapOf("hvac_action" to "idle"), "auto")))
+            assertFalse(ClimateLogic.isActive(changed(tado, mapOf("hvac_action" to "off"), "off")))
             assertFalse(ClimateLogic.isActive(changed(tado, mapOf("hvac_action" to null), "off")))
+            assertFalse(ClimateLogic.isActive(changed(tado, emptyMap(), "unavailable")))
         }
 
         @Test

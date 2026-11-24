@@ -20,9 +20,9 @@ object ClimateLogic : DeviceLogic {
         if (readClimate(entity).isAvailable) OkAction.OpenPanel else OkAction.Nothing
 
     override fun isActive(entity: EntityState): Boolean {
+        // On whenever it is switched on, as a light's card is: the card's words say whether it is heating or idle.
         val view = readClimate(entity)
-        if (view.hvacAction != null) return view.hvacAction == "heating" || view.hvacAction == "cooling"
-        return view.hvacMode != "off"
+        return view.isAvailable && view.hvacMode != "off"
     }
 
     override fun summary(entity: EntityState): String {
