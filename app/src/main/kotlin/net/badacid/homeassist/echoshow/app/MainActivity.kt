@@ -130,6 +130,9 @@ class MainActivity : Activity() {
         }
         // Going black counts as the screen sleeping: the PIN lock locks.
         if (blank && !wasBlank) model.lock()
+        // The screen should look off: no status bar or navigation buttons over the black. A swipe from the
+        // edge still brings them back for a moment.
+        if (blank) hideSystemBars()
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -146,6 +149,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        hideSystemBars()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         saver.onTouch() // Coming back counts as a touch: the screen starts awake.
         updateBlank()
@@ -374,5 +378,13 @@ class MainActivity : Activity() {
             it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
             it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        // The older flags as well: LineageOS 18.1 does not always honour the call above on its own.
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
     }
 }
