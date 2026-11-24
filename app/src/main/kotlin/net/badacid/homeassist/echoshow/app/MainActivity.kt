@@ -30,6 +30,7 @@ import net.badacid.homeassist.echoshow.core.findDevice
 import net.badacid.homeassist.echoshow.core.groupByRoom
 import net.badacid.homeassist.echoshow.platform.OkHttpSend
 import net.badacid.homeassist.echoshow.platform.loadPicture
+import net.badacid.homeassist.echoshow.platform.findHomeAssistant
 import net.badacid.homeassist.echoshow.screens.Theme
 import net.badacid.homeassist.echoshow.screens.connecting.ConnectingView
 import net.badacid.homeassist.echoshow.screens.home.HomeCallbacks
@@ -137,6 +138,7 @@ class MainActivity : Activity() {
                 state.saved.signIn?.address ?: state.saved.layoutAddress,
                 state.notice,
                 state.refusedToken,
+                { findHomeAssistant(this) },
             ) { model.signedIn(it) }
             signInFlow = flow
             val view = SignInView(this, flow)
