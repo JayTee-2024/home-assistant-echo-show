@@ -8,6 +8,9 @@ private val ALLOWED: Map<String, Set<String>> = mapOf(
     "core" to emptySet(),
 )
 
+/** Every layer of the app. */
+private val LAYERS = setOf("app", "screens", "devices", "platform", "core")
+
 private val IMPORT = Regex("""^import\s+net\.badacid\.homeassist\.echoshow\.(\w+)""", RegexOption.MULTILINE)
 
 /**
@@ -20,6 +23,8 @@ fun layerViolations(files: Map<String, String>): List<String> =
         val allowed = ALLOWED[layer] ?: return@flatMap emptyList()
         IMPORT.findAll(text)
             .map { it.groupValues[1] }
+            // Only layer names count: the app's own R and BuildConfig sit at the top of the package.
+            .filter { it in LAYERS }
             .filter { it != layer && it !in allowed }
             .distinct()
             .map { "$path: imports $it" }

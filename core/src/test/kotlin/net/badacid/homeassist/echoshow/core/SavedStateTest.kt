@@ -153,6 +153,21 @@ class SavedStateTest {
         }
 
         @Test
+        fun `closes up empty pages, so a huge saved page number cannot stall the start`() {
+            val far = listOf(
+                mapOf("deviceId" to "device:far", "page" to 50_000_000, "column" to 0, "row" to 0, "size" to "small"),
+                mapOf("deviceId" to "device:farthest", "page" to Int.MAX_VALUE, "column" to 0, "row" to 0, "size" to "small"),
+            )
+            val text = edited(state) {
+                val cards = it["layout"]!!.jsonObject["cards"]!!.jsonArray + far.map { card -> toJson(card) }
+                it["layout"] = JsonObject(mapOf("cards" to JsonArray(cards)))
+            }
+            val read = parseSavedState(text).layout
+            assertEquals(listOf(0, 0, 1, 2), read.cards.map { it.page })
+            assertEquals(3, pageCount(read))
+        }
+
+        @Test
         fun `uses an empty layout when the layout is not a list of cards`() {
             val text = edited(state) { it["layout"] = JsonPrimitive("nonsense") }
             assertEquals(EMPTY_LAYOUT, parseSavedState(text).layout)

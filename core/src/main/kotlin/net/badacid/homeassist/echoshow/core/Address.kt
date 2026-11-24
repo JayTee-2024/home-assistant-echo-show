@@ -17,7 +17,10 @@ const val DEFAULT_ADDRESS = "homeassistant.local:8123"
 
 private const val DEFAULT_PORT = "8123"
 private val SCHEME = Regex("^(https?)://", RegexOption.IGNORE_CASE)
-private val HOST_AND_PORT = Regex("^([A-Za-z0-9._-]+)(?::(\\d+))?$")
+private val HOST_AND_PORT = Regex("^([A-Za-z0-9._-]+)(?::(\\d{1,5}))?$")
+
+/** One part of a host name between dots: letters, digits, '_' and '-', not starting or ending with '-'. */
+private val HOST_LABEL = Regex("^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?$")
 
 /**
  * Turns what the person typed into the address the app talks to. A bare host gets http:// and port 8123,
@@ -38,6 +41,10 @@ fun normaliseAddress(input: String): AddressResult {
     val match = HOST_AND_PORT.matchEntire(hostAndPort) ?: return AddressResult.Invalid
     val host = match.groupValues[1].lowercase()
     val typedPort = match.groupValues[2]
+    // Anything accepted here must also be a valid web address for the HTTP library, or sign-in would fail
+    // with an error instead of a message.
+    if (host.split('.').any { !HOST_LABEL.matches(it) }) return AddressResult.Invalid
+    if (typedPort.isNotEmpty() && typedPort.toInt() !in 1..65535) return AddressResult.Invalid
 
     // Someone who typed a full address knows their port. Only a bare host gets the default.
     val port = when {

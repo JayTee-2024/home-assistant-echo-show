@@ -48,4 +48,15 @@ class LayerRulesTest {
         assertEquals(1, found.size)
         assertTrue(found[0].contains("screens/Home.kt"))
     }
+
+    @Test
+    fun `the app's own R and BuildConfig may be imported anywhere`() {
+        val found = layerViolations(
+            mapOf(
+                "screens/Home.kt" to "import net.badacid.homeassist.echoshow.R\nimport net.badacid.homeassist.echoshow.BuildConfig\n",
+                "platform/Storage.kt" to "import net.badacid.homeassist.echoshow.R\n",
+            ),
+        )
+        assertEquals(emptyList<String>(), found)
+    }
 }

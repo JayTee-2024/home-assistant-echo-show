@@ -129,7 +129,9 @@ private fun readLayout(value: JsonElement?): Layout {
         val clashes = kept.any { it.deviceId == card.deviceId || (it.page == card.page && overlaps(it, card)) }
         if (!clashes) kept += card
     }
-    return Layout(kept)
+    // Empty pages are closed up, so a corrupt page number (50 million, say) cannot make adding a card walk
+    // through millions of empty pages.
+    return removeEmptyPages(Layout(kept))
 }
 
 /** One saved card, or null when any field is missing, of the wrong kind, or off the grid. */

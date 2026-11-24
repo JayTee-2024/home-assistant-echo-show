@@ -159,3 +159,13 @@ class ClimateTest {
         }
     }
 }
+
+class ClimateBadRangeTest {
+    @Test
+    fun `stepTarget does not fail when the minimum is above the maximum`() {
+        // A thermostat in Fahrenheit that reports only min_temp, so the default maximum of 35 applies.
+        val view = readClimate(changed(sampleEntity("climate.living_room"), mapOf("min_temp" to 45, "max_temp" to null, "target_temp_step" to 1)))
+        assertEquals(45.0, stepTarget(view, 60.0, 1))
+        assertEquals(45.0, stepTarget(view, 60.0, -1))
+    }
+}

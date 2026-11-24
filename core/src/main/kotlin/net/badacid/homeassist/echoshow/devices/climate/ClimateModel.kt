@@ -60,7 +60,8 @@ fun stepTarget(view: ClimateView, target: Double?, direction: Int): Double {
     // direction. The small allowance absorbs floating-point dust (21.1 / 0.1).
     val nextSteps = if (direction > 0) floor(stepsFromZero + 1e-6) + 1 else ceil(stepsFromZero - 1e-6) - 1
     val next = roundTo(nextSteps * view.step, view.step)
-    return next.coerceIn(view.minTemp, view.maxTemp)
+    // As the LG app: max then min, which never fails even when the minimum is above the maximum.
+    return maxOf(view.minTemp, minOf(view.maxTemp, next))
 }
 
 /** '21°', '20.5°', or '–' when there is no temperature. */

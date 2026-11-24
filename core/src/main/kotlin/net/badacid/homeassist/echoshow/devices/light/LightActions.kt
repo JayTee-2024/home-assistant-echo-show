@@ -24,7 +24,8 @@ fun setBrightness(entity: EntityState, percent: Int): Action {
 
 fun setWhite(entity: EntityState, kelvin: Int): Action {
     val view = readLight(entity)
-    val kept = kelvin.coerceIn(view.minKelvin, view.maxKelvin)
+    // As the LG app: max then min, which never fails even when a bulb reports its range the wrong way round.
+    val kept = maxOf(view.minKelvin, minOf(view.maxKelvin, kelvin))
     return turnOn(
         entity,
         jsonObjectOf("color_temp_kelvin" to kept),

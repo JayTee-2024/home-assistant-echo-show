@@ -66,4 +66,20 @@ class AddressTest {
     fun `the default address is Home Assistant's own name`() {
         assertEquals("homeassistant.local:8123", DEFAULT_ADDRESS)
     }
+
+    @Test
+    fun `reports a port outside 1 to 65535 as invalid`() {
+        for (bad in listOf("192.168.1.5:99999", "host:0", "host:65536", "http://host:70000")) {
+            assertEquals(AddressResult.Invalid, url(bad), bad)
+        }
+        assertEquals(AddressResult.Ok("http://host:65535"), url("host:65535"))
+    }
+
+    @Test
+    fun `reports a host with an empty part or a stray dot or dash as invalid`() {
+        for (bad in listOf("192.168.1..100", ".", "..", ".host", "host.", "-host", "host-", "a..b:8123")) {
+            assertEquals(AddressResult.Invalid, url(bad), bad)
+        }
+        assertEquals(AddressResult.Ok("http://my-ha.lan:8123"), url("my-ha.lan"))
+    }
 }

@@ -223,3 +223,13 @@ class LightTest {
         }
     }
 }
+
+class LightBadRangeTest {
+    @Test
+    fun `setWhite does not fail when the bulb reports its range the wrong way round`() {
+        val lamp = changed(sampleEntity("light.lounge_lamp"), mapOf("min_color_temp_kelvin" to 6500, "max_color_temp_kelvin" to 2700))
+        assertEquals(jsonObjectOf("color_temp_kelvin" to 6500), setWhite(lamp, 3000).call.data)
+        val onlyMin = changed(sampleEntity("light.lounge_lamp"), mapOf("min_color_temp_kelvin" to 7000, "max_color_temp_kelvin" to null))
+        assertEquals(jsonObjectOf("color_temp_kelvin" to 7000), setWhite(onlyMin, 3000).call.data)
+    }
+}
