@@ -1,0 +1,4 @@
+# Scripts run on Linux (and in the PC's Linux shell) must keep LF line endings, whatever Git does on Windows.
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf

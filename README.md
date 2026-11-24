@@ -19,6 +19,19 @@ scripts/setup-android-sdk.sh        # only if you have no Android SDK; installs 
 - `core/`: the app's logic in plain Kotlin, tested on the JVM.
 - `app/`: the Android app.
 
+## Trying it on the Echo
+
+On the Echo: Settings → System → Developer options → turn on Android debugging and Wireless debugging.
+Then, in a Linux shell (the PC's linked shell works):
+
+```sh
+scripts/echo.sh pair <ip:port> <code>   # once: from "Pair device with pairing code"
+scripts/echo.sh connect <ip:port>       # the "IP address & Port" shown on the Wireless debugging screen
+scripts/echo.sh install app/build/outputs/apk/debug/app-debug.apk
+```
+
+The pairing key stays in `.deploy/` (git-ignored). The Echo's port changes when it restarts: run `connect` again.
+
 ## Licence
 
 Apache License 2.0. See `LICENSE`.

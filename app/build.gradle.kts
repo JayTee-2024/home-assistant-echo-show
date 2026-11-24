@@ -24,6 +24,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    sourceSets["test"].resources.srcDir("../fixtures")
+
     testOptions {
         unitTests.all { it.useJUnitPlatform() }
     }
