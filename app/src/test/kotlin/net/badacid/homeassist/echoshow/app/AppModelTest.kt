@@ -3,6 +3,7 @@ package net.badacid.homeassist.echoshow.app
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -159,6 +160,21 @@ class AppModelTest {
         runCurrent()
         assertEquals(TOKEN_REJECTED, model.state.value.notice)
         assertEquals("long-lived", model.state.value.refusedToken)
+    }
+
+    @Test
+    fun `a refused token arrives on the sign-in screen in the same state as the phase, never after it`() = runTest {
+        val model = model(savedWith(signIn = null))
+        model.start()
+        runCurrent()
+        // Every state the activity could draw, as a collector on the main thread sees them.
+        val seen = mutableListOf<AppState>()
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { model.state.collect { seen += it } }
+        attempts += { throw OpenFailed(OpenFailure.SIGN_IN_REJECTED) }
+        model.signedIn(signInWithToken("http://ha:8123", "long-lived"))
+        runCurrent()
+        val firstSignedOut = seen.first { it.phase == Phase.SIGNED_OUT && it.notice == TOKEN_REJECTED }
+        assertEquals("long-lived", firstSignedOut.refusedToken)
     }
 
     @Test

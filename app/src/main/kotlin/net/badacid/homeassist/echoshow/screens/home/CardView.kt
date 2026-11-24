@@ -153,6 +153,13 @@ class CardView(
                 addView(it, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply { bottomMargin = dp(if (size == CardSize.LARGE) 92f else 60f) })
             }
             view.show(content.mainEntity)
+        } else {
+            // No longer a picture (the camera has gone from Home Assistant): stop fetching the old one.
+            picture?.let {
+                it.stop()
+                removeView(it)
+            }
+            picture = null
         }
     }
 

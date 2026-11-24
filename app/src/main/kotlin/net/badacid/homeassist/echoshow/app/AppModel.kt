@@ -222,8 +222,8 @@ class AppModel(
                 if (!isCurrent()) return@launch
                 if (failed.failure == OpenFailure.SIGN_IN_REJECTED) {
                     val isToken = signIn.kind == SignInKind.LONG_LIVED_TOKEN
-                    signOutLocally(if (isToken) TOKEN_REJECTED else SIGN_IN_REJECTED)
-                    if (isToken) publish { it.copy(refusedToken = signIn.accessToken) }
+                    // One publish, so the sign-in screen is drawn with the token to correct, never without it.
+                    signOutLocally(if (isToken) TOKEN_REJECTED else SIGN_IN_REJECTED, if (isToken) signIn.accessToken else null)
                     return@launch
                 }
                 // Home Assistant did not answer, or was not ready. Say so, and try again shortly, with the
@@ -272,7 +272,7 @@ class AppModel(
     }
 
     /** Forgets the sign-in on this Echo and shows the sign-in screen. The layout is kept. */
-    private fun signOutLocally(reason: String?) {
+    private fun signOutLocally(reason: String?, refusedToken: String? = null) {
         // Ends any attempt in progress (see `attempt`).
         attempt += 1
         retry?.cancel()
@@ -290,6 +290,7 @@ class AppModel(
                 overlay = Overlay.None,
                 page = 0,
                 notice = reason,
+                refusedToken = refusedToken,
                 status = ConnectionStatus.CONNECTED,
             )
         }

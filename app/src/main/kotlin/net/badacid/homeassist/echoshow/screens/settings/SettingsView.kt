@@ -91,10 +91,13 @@ class SettingsView(context: Context, private val callbacks: SettingsCallbacks) :
     }
 
     fun show(state: SettingsScreenState) {
-        val first = this.state == null
+        val before = this.state
         this.state = state
         version.text = "Version ${state.version}"
-        if (first || section == Section.DEVICES) draw() // The other sections do not change while open.
+        // Redraw only when what is shown changed: Home Assistant reports often, and a row replaced between a
+        // finger going down and coming up would lose the tap. The other sections do not change while open.
+        val listChanged = before == null || before.rooms != state.rooms || before.layout != state.layout
+        if (before == null || (section == Section.DEVICES && listChanged)) draw()
     }
 
     private fun open(each: Section) {

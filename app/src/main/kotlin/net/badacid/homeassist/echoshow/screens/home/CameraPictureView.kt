@@ -63,7 +63,8 @@ class CameraPictureView(
         super.onDetachedFromWindow()
     }
 
-    private fun stop() {
+    /** Stops fetching. A later show() or attach starts again. */
+    fun stop() {
         loading?.cancel()
         loading = null
     }

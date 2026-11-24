@@ -135,6 +135,21 @@ class GridViewTest {
     }
 
     @Test
+    fun `a camera card whose device has gone drops its picture and stops fetching`() {
+        var loads = 0
+        val picture = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        val view = card("device:dev_ring", CardSize.LARGE, loader = { _, _, _ -> loads++; picture })
+        laidOut(view, 600, 500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, (0 until view.childCount).count { view.getChildAt(it) is CameraPictureView })
+        view.show(cardContent("device:dev_ring", null, home, CardSize.LARGE))
+        val before = loads
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+        assertEquals(0, (0 until view.childCount).count { view.getChildAt(it) is CameraPictureView })
+        assertEquals(before, loads)
+    }
+
+    @Test
     fun `home grid screenshot`() {
         val picture = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.rgb(70, 90, 110)) }
         val loader = PictureLoader { _, _, _ -> picture }

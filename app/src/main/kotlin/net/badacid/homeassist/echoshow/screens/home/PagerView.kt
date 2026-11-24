@@ -82,6 +82,8 @@ class PagerView(context: Context, private val onPage: (Int) -> Unit) : ViewGroup
                 if (!dragging && dx > slop && dx > abs(event.y - downY)) {
                     dragging = true
                     downX = event.x
+                    // The card had the DOWN, so onTouchEvent never saw it: the drag follows the finger from here.
+                    lastX = event.x
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
             }

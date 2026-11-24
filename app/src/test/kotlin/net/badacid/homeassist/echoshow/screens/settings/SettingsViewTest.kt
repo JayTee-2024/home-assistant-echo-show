@@ -65,6 +65,20 @@ class SettingsViewTest {
     }
 
     @Test
+    fun `a new report that changes nothing in the list keeps the rows, so a tap in progress is not lost`() {
+        val view = settings()
+        val row = view.rowWith("Kitchen ceiling")
+        // A sensor update elsewhere: rooms and layout rebuilt from fresh data, but equal.
+        view.show(state().copy(rooms = groupByRoom(buildDevices(sampleHome(), DEVICE_LOGIC))))
+        laidOut(view)
+        assertTrue(row === view.rowWith("Kitchen ceiling"))
+        // Adding the device does change the row.
+        view.show(state().copy(layout = Layout(state().layout.cards + CardPlace("device:dev_lifx_ceiling", 0, 1, 0, CardSize.SMALL))))
+        laidOut(view)
+        assertTrue(visibleTexts(view.rowWith("Kitchen ceiling")).contains("On screen ✓"))
+    }
+
+    @Test
     fun `a tap on a device calls toggleDevice`() {
         val view = settings()
         view.rowWith("Kitchen ceiling").performClick()

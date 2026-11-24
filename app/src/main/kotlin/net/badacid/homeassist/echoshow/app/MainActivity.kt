@@ -74,9 +74,14 @@ class MainActivity : Activity() {
     }
 
     private fun renderPhase(state: AppState) {
-        val failureKey = if (state.phase == Phase.CONNECTING) state.connectFailure else null
-        // The connecting screen is made afresh when the reason changes; the others once per phase.
-        if (state.phase != shownPhase || (state.phase == Phase.CONNECTING && failureKey != shownFailure)) {
+        // The connecting screen shows the failure; the sign-in screen starts from the notice and refused token.
+        val failureKey: Any? = when (state.phase) {
+            Phase.CONNECTING -> state.connectFailure
+            Phase.SIGNED_OUT -> state.notice to state.refusedToken
+            else -> null
+        }
+        // Those two are made afresh when that changes; the others once per phase.
+        if (state.phase != shownPhase || failureKey != shownFailure) {
             shownPhase = state.phase
             shownFailure = failureKey
             replacePhaseView(makePhaseView(state))

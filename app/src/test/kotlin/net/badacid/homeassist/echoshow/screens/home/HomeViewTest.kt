@@ -104,6 +104,21 @@ class HomeViewTest {
     }
 
     @Test
+    fun `a drag that starts on a card moves the pages with the finger, without a jump`() {
+        val home = view()
+        home.show(state())
+        laidOut(home)
+        val pager = generateSequence(listOf<View>(home)) { level -> level.flatMap { v -> (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).map(g::getChildAt) } ?: emptyList() }.ifEmpty { null } }
+            .flatten().filterIsInstance<PagerView>().first()
+        val start = SystemClock.uptimeMillis()
+        // (1000, 450) is on a card on page 0. Slowly 300 px left, in steps of 10.
+        home.dispatchTouchEvent(MotionEvent.obtain(start, start, MotionEvent.ACTION_DOWN, 1000f, 450f, 0))
+        for (step in 1..30) home.dispatchTouchEvent(MotionEvent.obtain(start, start + step * 50L, MotionEvent.ACTION_MOVE, 1000f - step * 10, 450f, 0))
+        // The pages follow the finger from where the drag was taken from the card, so they have moved less than 300 px but more than 250.
+        assertTrue("scrollX=${pager.scrollX}", pager.scrollX in 250..300)
+    }
+
+    @Test
     fun `a short drag goes back to the same page`() {
         val home = view()
         home.show(state())
